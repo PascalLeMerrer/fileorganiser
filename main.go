@@ -23,7 +23,7 @@ func main() {
 
 	// Create application with options
 	err := wails.Run(&options.App{
-		Title:             "wails-hello-world",
+		Title:             "File Organizer",
 		Width:             1024,
 		Height:            768,
 		MinWidth:          1024,
@@ -66,11 +66,11 @@ func main() {
 				UseToolbar:                 false,
 				HideToolbarSeparator:       true,
 			},
-			Appearance:           mac.NSAppearanceNameDarkAqua,
+			Appearance:           mac.NSAppearanceNameAqua,
 			WebviewIsTransparent: true,
 			WindowIsTranslucent:  true,
 			About: &mac.AboutInfo{
-				Title:   "wails-hello-world",
+				Title:   "File Organizer",
 				Message: "",
 				Icon:    icon,
 			},

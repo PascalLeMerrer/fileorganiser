@@ -1,9 +1,9 @@
 port module Main exposing (..)
 
 import Browser
-import Html exposing (Html, button, div, input, text)
+import Html exposing (Html, aside, button, div, footer, form, header, input, main_, text)
 import Html.Attributes exposing (autocomplete, class, id, type_, value)
-import Html.Events exposing (onClick, onInput)
+import Html.Events exposing (onInput, onSubmit)
 import Json.Decode exposing (Decoder, list)
 import Json.Decode.Pipeline exposing (required)
 import Json.Encode
@@ -140,7 +140,20 @@ decodeFileInfoList value =
 view : Model -> Html Msg
 view model =
     div [ class "app", id "app" ]
-        [ div [ class "input-box", id "input" ]
+        [ viewHeader model
+        , viewLeftSide model
+        , viewRightSide model
+        , viewFooter model
+        ]
+
+
+viewHeader : Model -> Html Msg
+viewHeader model =
+    header []
+        [ form
+            [ class "input-box"
+            , onSubmit Submit
+            ]
             [ input
                 [ class "input"
                 , id "name"
@@ -150,9 +163,15 @@ view model =
                 , value model.sourceDirectoryPath
                 ]
                 []
-            , button [ class "btn", onClick Submit ] [ text "Open" ]
+            , button [ class "btn", type_ "submit" ] [ text "Open" ]
             ]
-        , case model.error of
+        ]
+
+
+viewLeftSide : Model -> Html Msg
+viewLeftSide model =
+    aside []
+        [ case model.error of
             Nothing ->
                 viewFiles model
 
@@ -161,12 +180,39 @@ view model =
         ]
 
 
+viewRightSide : Model -> Html Msg
+viewRightSide model =
+    main_ [] []
+
+
 viewFiles : Model -> Html Msg
 viewFiles model =
     div [] <|
-        List.map viewFileInfo model.sourceDirectoryContent
+        [ text "Source Directory"
+        ]
+            ++ List.map viewFileInfo model.sourceDirectoryContent
 
 
 viewFileInfo : FileInfo -> Html Msg
 viewFileInfo fileInfo =
-    div [] [ text <| fileInfo.name ++ " " ++ fileInfo.modTime ++ " " ++ String.fromInt fileInfo.size ]
+    if fileInfo.isDir then
+        div [] [ text <| fileInfo.name ]
+
+    else
+        div []
+            [ div [] [ text fileInfo.name ]
+            , div [] [ text fileInfo.modTime ]
+            , div [] [ text <| String.fromInt fileInfo.size ]
+            ]
+
+
+viewFooter : Model -> Html Msg
+viewFooter model =
+    footer []
+        [ case model.error of
+            Nothing ->
+                text "TODO display help"
+
+            Just errorMsg ->
+                text errorMsg
+        ]
