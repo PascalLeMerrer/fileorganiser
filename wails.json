@@ -1,0 +1,13 @@
+{
+  "name": "wails-hello-world",
+  "outputfilename": "wails-hello-world",
+  "frontend:install": "",
+  "frontend:build": "npm run build",
+  "frontend:dev:watcher": "npm run dev:watch",
+  "wailsjsdir": "./frontend",
+  "assetdir": "./frontend",
+  "author": {
+    "name": "Pascal Le Merrer",
+    "email": "pascal.lemerrer@protonmail.com"
+  }
+}
