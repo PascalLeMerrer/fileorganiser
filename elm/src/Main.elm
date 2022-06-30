@@ -64,8 +64,9 @@ port receiveError : (String -> msg) -> Sub msg
 
 type alias Model =
     { error : Maybe String
-    , sourceDirectoryContent : List FileInfo
+    , sourceDirectoryFiles : List FileInfo
     , sourceDirectoryPath : String
+    , sourceSubDirectories : List FileInfo
     , timezone : Time.Zone
     }
 
@@ -73,8 +74,9 @@ type alias Model =
 init : () -> ( Model, Cmd Msg )
 init _ =
     ( { error = Nothing
-      , sourceDirectoryContent = []
+      , sourceDirectoryFiles = []
       , sourceDirectoryPath = "."
+      , sourceSubDirectories = []
       , timezone = Time.utc
       }
     , Task.perform AdjustTimeZone Time.here
@@ -104,7 +106,13 @@ update msg model =
             ( model, loadDirectoryContent model.sourceDirectoryPath )
 
         FileInfoReceived directoryContent ->
-            ( { model | sourceDirectoryContent = directoryContent }, Cmd.none )
+            let
+                ( dirList, fileList ) =
+                    List.partition .isDir directoryContent
+            in
+            ( { model | sourceSubDirectories = dirList, sourceDirectoryFiles = fileList }
+            , Cmd.none
+            )
 
         NoOp ->
             ( model, Cmd.none )
@@ -181,14 +189,7 @@ viewHeader model =
 
 viewLeftSide : Model -> Html Msg
 viewLeftSide model =
-    aside []
-        [ case model.error of
-            Nothing ->
-                viewFiles model
-
-            Just errorMsg ->
-                text errorMsg
-        ]
+    aside [] <| viewFiles model
 
 
 viewRightSide : Model -> Html Msg
@@ -196,12 +197,33 @@ viewRightSide model =
     main_ [] []
 
 
-viewFiles : Model -> Html Msg
+viewFiles : Model -> List (Html Msg)
 viewFiles model =
-    div [] <|
-        [ h2 [] [ text "Source Directory" ]
+    [ viewSourceSubirectories model
+    , viewSourceFiles model
+    ]
+
+
+viewSourceSubirectories : Model -> Html Msg
+viewSourceSubirectories model =
+    div [ class "panel" ] <|
+        [ h2 [] [ text "Source Directories" ]
         ]
-            ++ List.map (viewFileInfo model) model.sourceDirectoryContent
+            ++ (model.sourceSubDirectories
+                    |> List.sortBy (.name >> String.toLower)
+                    |> List.map (viewFileInfo model)
+               )
+
+
+viewSourceFiles : Model -> Html Msg
+viewSourceFiles model =
+    div [ class "panel" ] <|
+        [ h2 [] [ text "Source Files" ]
+        ]
+            ++ (model.sourceDirectoryFiles
+                    |> List.sortBy (.name >> String.toLower)
+                    |> List.map (viewFileInfo model)
+               )
 
 
 viewFileInfo : Model -> FileInfo -> Html Msg

@@ -9,6 +9,7 @@ body {
     "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue",
     sans-serif;
   font-size: smaller;
+  cursor: default; /* enforces the default cursor of the platform */
 }
 
 @font-face {
@@ -73,13 +74,14 @@ h2 {
 }
 
 .fileinfo:hover {
-  background-color: lightgrey;
+  background-color: lightskyblue;
 }
 
 .filename {
   align-self: flex-start;
   flex:  1;
   margin-right: 10px;
+  overflow-x: hidden;
 }
 
 .filemodificationdate {
@@ -111,8 +113,12 @@ aside {
   grid-column-end: 2;
   grid-row-start: 2;
   grid-row-end: 3;
-  background: green;
-  padding: 10px;
+  background: lightgrey;
+  padding: 5px;
+  min-height: 0; /* Prevents the grid to extend outside of the visible area */
+  display: grid;
+  grid-template-rows: 1fr 3fr;
+  grid-row-gap: 5px;
 }
 
 main {
@@ -132,4 +138,11 @@ footer {
   background: lightgrey;
   color:  black;
   padding: 10px;
+}
+
+.panel {
+  border: 1px solid darkgrey;
+  padding: 5px;
+  overflow-y: scroll;
+  min-height: 0;
 }
