@@ -1,7 +1,7 @@
 port module Main exposing (..)
 
 import Browser
-import Html exposing (Html, aside, button, div, footer, form, header, input, main_, text)
+import Html exposing (Html, aside, button, div, footer, form, h2, header, input, main_, text)
 import Html.Attributes exposing (autocomplete, class, id, type_, value)
 import Html.Events exposing (onInput, onSubmit)
 import Iso8601
@@ -199,7 +199,7 @@ viewRightSide model =
 viewFiles : Model -> Html Msg
 viewFiles model =
     div [] <|
-        [ text "Source Directory"
+        [ h2 [] [ text "Source Directory" ]
         ]
             ++ List.map (viewFileInfo model) model.sourceDirectoryContent
 
@@ -210,10 +210,10 @@ viewFileInfo model fileInfo =
         div [] [ text <| fileInfo.name ]
 
     else
-        div []
-            [ div [] [ text fileInfo.name ]
-            , div [] [ viewDate model fileInfo.modTime ]
+        div [ class "fileinfo" ]
+            [ div [ class "filename" ] [ text fileInfo.name ]
             , div [] [ text <| String.fromInt fileInfo.size ]
+            , div [ class "filemodificationdate" ] [ viewDate model fileInfo.modTime ]
             ]
 
 
