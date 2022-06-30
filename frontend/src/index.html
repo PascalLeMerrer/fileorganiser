@@ -20,7 +20,6 @@
         .then((result) =>
           {
             app.ports.receiveDirectoryContent.send(result);
-            console.log("Result", result);
           }
         ).catch(msg => {
           app.ports.receiveError.send(msg);
