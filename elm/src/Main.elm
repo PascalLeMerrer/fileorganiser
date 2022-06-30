@@ -4,16 +4,19 @@ import Browser
 import Html exposing (Html, aside, button, div, footer, form, header, input, main_, text)
 import Html.Attributes exposing (autocomplete, class, id, type_, value)
 import Html.Events exposing (onInput, onSubmit)
+import Iso8601
 import Json.Decode exposing (Decoder, list)
 import Json.Decode.Pipeline exposing (required)
 import Json.Encode
+import Task
+import Time exposing (Month(..), Posix)
 
 
 type alias FileInfo =
     { name : String
     , size : Int
     , mode : Int
-    , modTime : String
+    , modTime : Posix
     , isDir : Bool
     }
 
@@ -24,7 +27,7 @@ fileInfoDecoder =
         |> required "Name" Json.Decode.string
         |> required "Size" Json.Decode.int
         |> required "Mode" Json.Decode.int
-        |> required "ModTime" Json.Decode.string
+        |> required "ModTime" Iso8601.decoder
         |> required "IsDir" Json.Decode.bool
 
 
@@ -61,18 +64,20 @@ port receiveError : (String -> msg) -> Sub msg
 
 type alias Model =
     { error : Maybe String
-    , sourceDirectoryPath : String
     , sourceDirectoryContent : List FileInfo
+    , sourceDirectoryPath : String
+    , timezone : Time.Zone
     }
 
 
-init : () -> ( Model, Cmd msg )
+init : () -> ( Model, Cmd Msg )
 init _ =
     ( { error = Nothing
-      , sourceDirectoryPath = "."
       , sourceDirectoryContent = []
+      , sourceDirectoryPath = "."
+      , timezone = Time.utc
       }
-    , Cmd.none
+    , Task.perform AdjustTimeZone Time.here
     )
 
 
@@ -81,7 +86,8 @@ init _ =
 
 
 type Msg
-    = BackendReturnedError String
+    = AdjustTimeZone Time.Zone
+    | BackendReturnedError String
     | SetSourceDirectory String
     | Submit
     | FileInfoReceived (List FileInfo)
@@ -105,6 +111,11 @@ update msg model =
 
         BackendReturnedError errorMsg ->
             ( { model | error = Just errorMsg }, Cmd.none )
+
+        AdjustTimeZone newZone ->
+            ( { model | timezone = newZone }
+            , Cmd.none
+            )
 
 
 
@@ -190,20 +201,74 @@ viewFiles model =
     div [] <|
         [ text "Source Directory"
         ]
-            ++ List.map viewFileInfo model.sourceDirectoryContent
+            ++ List.map (viewFileInfo model) model.sourceDirectoryContent
 
 
-viewFileInfo : FileInfo -> Html Msg
-viewFileInfo fileInfo =
+viewFileInfo : Model -> FileInfo -> Html Msg
+viewFileInfo model fileInfo =
     if fileInfo.isDir then
         div [] [ text <| fileInfo.name ]
 
     else
         div []
             [ div [] [ text fileInfo.name ]
-            , div [] [ text fileInfo.modTime ]
+            , div [] [ viewDate model fileInfo.modTime ]
             , div [] [ text <| String.fromInt fileInfo.size ]
             ]
+
+
+viewDate : Model -> Time.Posix -> Html Msg
+viewDate model time =
+    let
+        monthToString timeMonth =
+            case timeMonth of
+                Jan ->
+                    "01"
+
+                Feb ->
+                    "02"
+
+                Mar ->
+                    "03"
+
+                Apr ->
+                    "04"
+
+                May ->
+                    "05"
+
+                Jun ->
+                    "06"
+
+                Jul ->
+                    "07"
+
+                Aug ->
+                    "08"
+
+                Sep ->
+                    "09"
+
+                Oct ->
+                    "10"
+
+                Nov ->
+                    "11"
+
+                Dec ->
+                    "12"
+
+        day =
+            String.fromInt (Time.toDay model.timezone time)
+
+        month =
+            Time.toMonth model.timezone time
+                |> monthToString
+
+        year =
+            String.fromInt (Time.toYear model.timezone time)
+    in
+    text (day ++ "/" ++ month ++ "/" ++ year)
 
 
 viewFooter : Model -> Html Msg
