@@ -72,6 +72,10 @@ h2 {
   align-items: flex-end;
 }
 
+.fileinfo:hover {
+  background-color: lightgrey;
+}
+
 .filename {
   align-self: flex-start;
   flex:  1;

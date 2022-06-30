@@ -207,7 +207,7 @@ viewFiles model =
 viewFileInfo : Model -> FileInfo -> Html Msg
 viewFileInfo model fileInfo =
     if fileInfo.isDir then
-        div [] [ text <| fileInfo.name ]
+        div [ class "fileinfo" ] [ text <| fileInfo.name ]
 
     else
         div [ class "fileinfo" ]
