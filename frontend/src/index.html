@@ -15,14 +15,16 @@
   <script src="elm.js"></script>
   <script>
       const app = Elm.Main.init({ node: document.getElementById("elm") });
-      app.ports.loadDirectoryContent.subscribe(function (name) {
-        window.go.main.App.GetDirectoryContent(name)
-        .then(result =>
+      app.ports.loadDirectoryContent.subscribe(function (directoryName) {
+        window.go.main.App.GetDirectoryContent(directoryName)
+        .then((result) =>
           {
-            app.ports.receiveDirectoryContent.send(JSON.parse(result));
+            app.ports.receiveDirectoryContent.send(result);
             console.log("Result", result);
           }
-            );
+        ).catch(msg => {
+          app.ports.receiveError.send(msg);
+        });
       });
   </script>
 </body>

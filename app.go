@@ -2,9 +2,7 @@ package main
 
 import (
 	"context"
-	"log"
 	"os"
-	"encoding/json"
 	"time"
 )
 
@@ -60,16 +58,20 @@ type FileInfo struct {
 }
 
 
-func (a *App) GetDirectoryContent(name string) string {
+func (a *App) GetDirectoryContent(name string) ([]FileInfo, error) {
 	dir, err := os.Open(name)
+
 	if err != nil {
-		log.Printf("Error: %s", err)
-		data, _ := json.Marshal(NewError(err))
-		return string(data)
+		return nil, err
 	}
+
 	defer dir.Close()
 
-	fileList,_ := dir.Readdir(0)
+	fileList, err := dir.Readdir(0)
+
+	if err != nil {
+		return nil, err
+	}
 
     result := []FileInfo{}
 
@@ -84,16 +86,6 @@ func (a *App) GetDirectoryContent(name string) string {
         result = append(result, f)
     }
 
-	data, err := json.Marshal(result)
-
-	log.Printf("result %s", result)
-
-
-	if err != nil {
-		errorData, _ := json.Marshal(NewError(err))
-		log.Printf("Error: %s", err)
-		return string(errorData)
-	}
-	return string(data)
+	return result, nil
 
 }

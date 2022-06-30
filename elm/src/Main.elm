@@ -52,19 +52,24 @@ port loadDirectoryContent : String -> Cmd msg
 port receiveDirectoryContent : (Json.Encode.Value -> msg) -> Sub msg
 
 
+port receiveError : (String -> msg) -> Sub msg
+
+
 
 -- MODEL
 
 
 type alias Model =
-    { sourceDirectoryPath : String
+    { error : Maybe String
+    , sourceDirectoryPath : String
     , sourceDirectoryContent : List FileInfo
     }
 
 
 init : () -> ( Model, Cmd msg )
 init _ =
-    ( { sourceDirectoryPath = "."
+    ( { error = Nothing
+      , sourceDirectoryPath = "."
       , sourceDirectoryContent = []
       }
     , Cmd.none
@@ -76,7 +81,8 @@ init _ =
 
 
 type Msg
-    = SetSourceDirectory String
+    = BackendReturnedError String
+    | SetSourceDirectory String
     | Submit
     | FileInfoReceived (List FileInfo)
     | NoOp
@@ -97,6 +103,9 @@ update msg model =
         NoOp ->
             ( model, Cmd.none )
 
+        BackendReturnedError errorMsg ->
+            ( { model | error = Just errorMsg }, Cmd.none )
+
 
 
 -- SUBSCRIPTIONS
@@ -104,7 +113,10 @@ update msg model =
 
 subscriptions : Model -> Sub Msg
 subscriptions _ =
-    receiveDirectoryContent decodeFileInfoList
+    Sub.batch
+        [ receiveDirectoryContent decodeFileInfoList
+        , receiveError BackendReturnedError
+        ]
 
 
 decodeFileInfoList : Json.Encode.Value -> Msg
@@ -140,9 +152,19 @@ view model =
                 []
             , button [ class "btn", onClick Submit ] [ text "Open" ]
             ]
-        , div [] <|
-            List.map viewFileInfo model.sourceDirectoryContent
+        , case model.error of
+            Nothing ->
+                viewFiles model
+
+            Just errorMsg ->
+                text errorMsg
         ]
+
+
+viewFiles : Model -> Html Msg
+viewFiles model =
+    div [] <|
+        List.map viewFileInfo model.sourceDirectoryContent
 
 
 viewFileInfo : FileInfo -> Html Msg
