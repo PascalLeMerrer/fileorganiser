@@ -2,7 +2,7 @@ port module Main exposing (..)
 
 import Browser
 import Html exposing (Html, aside, button, div, footer, h2, header, input, main_, text)
-import Html.Attributes exposing (autocomplete, class, id, type_, value)
+import Html.Attributes exposing (autocomplete, class, id, placeholder, type_, value)
 import Html.Events exposing (onClick, onInput)
 import Iso8601
 import Json.Decode exposing (Decoder, list)
@@ -261,6 +261,7 @@ viewHeader model =
                 , autocomplete False
                 , onInput UserChangedFilter
                 , value model.filter
+                , placeholder "Enter one or more words to filter source files and destination directories"
                 ]
                 []
             , button [ class "btn", onClick UserClickedClearFilter ] [ text "Clear" ]
