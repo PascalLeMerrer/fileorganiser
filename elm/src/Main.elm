@@ -100,9 +100,9 @@ type Msg
     = AdjustTimeZone Time.Zone
     | BackendReturnedError String
     | BackendReturnedCurrentDirPath String
+    | BackendReturnedSourceDirectoryContent (List FileInfo)
     | SetSourceDirectory String
     | Submit
-    | FileInfoReceived (List FileInfo)
     | NoOp
 
 
@@ -122,7 +122,7 @@ update msg model =
         BackendReturnedError errorMsg ->
             ( { model | error = Just errorMsg }, Cmd.none )
 
-        FileInfoReceived directoryContent ->
+        BackendReturnedSourceDirectoryContent directoryContent ->
             let
                 ( dirList, fileList ) =
                     List.partition .isDir directoryContent
@@ -160,9 +160,9 @@ decodeFileInfoList value =
         decodedList =
             Json.Decode.decodeValue (list fileInfoDecoder) value
     in
-    case Debug.log "decodedList" decodedList of
+    case decodedList of
         Ok fileInfoList ->
-            FileInfoReceived fileInfoList
+            BackendReturnedSourceDirectoryContent fileInfoList
 
         Err error ->
             NoOp
