@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"os"
+	"path/filepath"
 	"time"
 )
 
@@ -99,5 +100,27 @@ func (a *App) GetDirectoryContent(dirName string) ([]FileInfo, error) {
     }
 
 	return result, nil
+}
 
+func (a *App) GetSubdirectoriesRecursively(dirName string) ([]FileInfo, error) {
+	result := []FileInfo{}
+	err := filepath.Walk(dirName,
+	    func(path string, info os.FileInfo, err error) error {
+		    if err != nil {
+		        return err
+		    }
+		    isHidden, _ := isHidden(info.Name(), dirName)
+	    	if info.IsDir() && ! isHidden {
+		        f := FileInfo{
+		            Name:    info.Name(),
+		            Size:    info.Size(),
+		            Mode:    info.Mode(),
+		            ModTime: info.ModTime(),
+		            IsDir:   info.IsDir(),
+		        }
+		        result = append(result, f)
+	    	}
+		    return nil
+		})
+	return result, err
 }

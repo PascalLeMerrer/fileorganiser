@@ -62,7 +62,10 @@ main =
 -- PORTS
 
 
-port loadDirectoryContent : String -> Cmd msg
+port getDirectoryContent : String -> Cmd msg
+
+
+port getSubdirectories : String -> Cmd msg
 
 
 port getCurrentDirectoryPath : () -> Cmd msg
@@ -74,6 +77,9 @@ port receiveCurrentDirectoryPath : (String -> msg) -> Sub msg
 port receiveDirectoryContent : (Json.Encode.Value -> msg) -> Sub msg
 
 
+port receiveSubDirectories : (Json.Encode.Value -> msg) -> Sub msg
+
+
 port receiveError : (String -> msg) -> Sub msg
 
 
@@ -82,7 +88,9 @@ port receiveError : (String -> msg) -> Sub msg
 
 
 type alias Model =
-    { error : Maybe String
+    { destinationDirectoryFiles : List FileInfo
+    , destinationSubdirectories : List FileInfo
+    , error : Maybe String
     , filter : String
     , pathSeparator : String
     , sourceDirectoryFiles : List FileInfo
@@ -95,7 +103,9 @@ type alias Model =
 
 init : () -> ( Model, Cmd Msg )
 init _ =
-    ( { error = Nothing
+    ( { destinationDirectoryFiles = []
+      , destinationSubdirectories = []
+      , error = Nothing
       , filter = ""
       , pathSeparator = unixPathSep
       , sourceDirectoryFiles = []
@@ -120,6 +130,7 @@ type Msg
     | BackendReturnedError String
     | BackendReturnedCurrentDirPath String
     | BackendReturnedSourceDirectoryContent (List FileInfo)
+    | BackendReturnedDestinationDirectories (List FileInfo)
     | SetSourceDirectory String
     | UserChangedFilter String
     | UserClickedClearFilter
@@ -147,7 +158,10 @@ update msg model =
                 | sourceDirectoryPath = path
                 , pathSeparator = pathSeparator
               }
-            , loadDirectoryContent path
+            , Cmd.batch
+                [ getDirectoryContent path
+                , getSubdirectories path
+                ]
             )
 
         BackendReturnedError errorMsg ->
@@ -179,6 +193,11 @@ update msg model =
 
         UserClickedClearFilter ->
             ( { model | filter = "" } |> filterSourceFiles
+            , Cmd.none
+            )
+
+        BackendReturnedDestinationDirectories fileInfos ->
+            ( { model | destinationSubdirectories = fileInfos }
             , Cmd.none
             )
 
@@ -214,23 +233,25 @@ filterByName filters fileInfo =
 subscriptions : Model -> Sub Msg
 subscriptions _ =
     Sub.batch
-        [ receiveDirectoryContent decodeFileInfoList
+        [ receiveDirectoryContent (decodeFileInfoList BackendReturnedSourceDirectoryContent)
         , receiveError BackendReturnedError
         , receiveCurrentDirectoryPath BackendReturnedCurrentDirPath
+        , receiveSubDirectories (decodeFileInfoList BackendReturnedDestinationDirectories)
         ]
 
 
-decodeFileInfoList : Json.Encode.Value -> Msg
-decodeFileInfoList value =
+decodeFileInfoList : (List FileInfo -> Msg) -> Json.Encode.Value -> Msg
+decodeFileInfoList msg value =
     let
         decodedList =
             Json.Decode.decodeValue (list fileInfoDecoder) value
     in
     case decodedList of
         Ok fileInfoList ->
-            BackendReturnedSourceDirectoryContent fileInfoList
+            msg fileInfoList
 
         Err error ->
+            -- TODO process error
             NoOp
 
 
@@ -271,23 +292,32 @@ viewHeader model =
 
 viewLeftSide : Model -> Html Msg
 viewLeftSide model =
-    aside [] <| viewFiles model
+    div [ id "container-left" ] <|
+        viewSource model
 
 
 viewRightSide : Model -> Html Msg
 viewRightSide model =
-    main_ [] []
+    div [ id "container-right" ] <|
+        viewDestination model
 
 
-viewFiles : Model -> List (Html Msg)
-viewFiles model =
-    [ viewSourceSubirectories model
+viewSource : Model -> List (Html Msg)
+viewSource model =
+    [ viewSourceSubdirectories model
     , viewSourceFiles model
     ]
 
 
-viewSourceSubirectories : Model -> Html Msg
-viewSourceSubirectories model =
+viewDestination : Model -> List (Html Msg)
+viewDestination model =
+    [ viewDestinationSubdirectories model
+    , viewDestinationFiles model
+    ]
+
+
+viewSourceSubdirectories : Model -> Html Msg
+viewSourceSubdirectories model =
     let
         currentDirName =
             String.split model.pathSeparator model.sourceDirectoryPath
@@ -303,12 +333,34 @@ viewSourceSubirectories model =
                )
 
 
+viewDestinationSubdirectories : Model -> Html Msg
+viewDestinationSubdirectories model =
+    div [ class "panel" ] <|
+        [ h2 [] [ text <| "Destination subdirectories " ]
+        ]
+            ++ (model.destinationSubdirectories
+                    |> List.sortBy (.name >> String.toLower)
+                    |> List.map (viewFileInfo model)
+               )
+
+
 viewSourceFiles : Model -> Html Msg
 viewSourceFiles model =
     div [ class "panel" ] <|
         [ h2 [] [ text "Source Files" ]
         ]
             ++ (model.filteredSourceDirectoryFiles
+                    |> List.sortBy (.name >> String.toLower)
+                    |> List.map (viewFileInfo model)
+               )
+
+
+viewDestinationFiles : Model -> Html Msg
+viewDestinationFiles model =
+    div [ class "panel" ] <|
+        [ h2 [] [ text "Destination Files" ]
+        ]
+            ++ (model.destinationDirectoryFiles
                     |> List.sortBy (.name >> String.toLower)
                     |> List.map (viewFileInfo model)
                )

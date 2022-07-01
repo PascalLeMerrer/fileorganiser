@@ -29,11 +29,23 @@
       });
 
       // Get directory content
-      app.ports.loadDirectoryContent.subscribe(function (directoryName) {
+      app.ports.getDirectoryContent.subscribe(function (directoryName) {
         window.go.main.App.GetDirectoryContent(directoryName)
         .then((result) =>
           {
             app.ports.receiveDirectoryContent.send(result);
+          }
+        ).catch(msg => {
+          app.ports.receiveError.send(msg);
+        });
+      });
+
+      // Get subdirectories
+      app.ports.getSubdirectories.subscribe(function (directoryName) {
+        window.go.main.App.GetSubdirectoriesRecursively(directoryName)
+        .then((result) =>
+          {
+            app.ports.receiveSubDirectories.send(result);
           }
         ).catch(msg => {
           app.ports.receiveError.send(msg);
