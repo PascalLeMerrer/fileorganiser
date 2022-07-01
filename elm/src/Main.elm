@@ -92,9 +92,10 @@ type alias Model =
     , destinationSubdirectories : List FileInfo
     , error : Maybe String
     , filter : String
+    , filteredDestinationSubdirectories : List FileInfo
+    , filteredSourceDirectoryFiles : List FileInfo
     , pathSeparator : String
     , sourceDirectoryFiles : List FileInfo
-    , filteredSourceDirectoryFiles : List FileInfo
     , sourceDirectoryPath : String
     , sourceSubDirectories : List FileInfo
     , timezone : Time.Zone
@@ -107,9 +108,10 @@ init _ =
       , destinationSubdirectories = []
       , error = Nothing
       , filter = ""
+      , filteredDestinationSubdirectories = []
+      , filteredSourceDirectoryFiles = []
       , pathSeparator = unixPathSep
       , sourceDirectoryFiles = []
-      , filteredSourceDirectoryFiles = []
       , sourceDirectoryPath = "."
       , sourceSubDirectories = []
       , timezone = Time.utc
@@ -187,7 +189,9 @@ update msg model =
             ( { model | sourceDirectoryPath = path }, Cmd.none )
 
         UserChangedFilter filteringString ->
-            ( { model | filter = filteringString } |> filterSourceFiles
+            ( { model | filter = filteringString }
+                |> filterSourceFiles
+                |> filterDestinationDirectories
             , Cmd.none
             )
 
@@ -198,6 +202,7 @@ update msg model =
 
         BackendReturnedDestinationDirectories fileInfos ->
             ( { model | destinationSubdirectories = fileInfos }
+                |> filterDestinationDirectories
             , Cmd.none
             )
 
@@ -218,6 +223,25 @@ filterSourceFiles model =
             { model
                 | filteredSourceDirectoryFiles =
                     List.filter (filterByName words) model.sourceDirectoryFiles
+            }
+
+
+filterDestinationDirectories : Model -> Model
+filterDestinationDirectories model =
+    let
+        words =
+            String.words model.filter
+    in
+    case words of
+        [] ->
+            { model
+                | filteredDestinationSubdirectories = model.destinationSubdirectories
+            }
+
+        _ ->
+            { model
+                | filteredDestinationSubdirectories =
+                    List.filter (filterByName words) model.destinationSubdirectories
             }
 
 
@@ -338,7 +362,7 @@ viewDestinationSubdirectories model =
     div [ class "panel" ] <|
         [ h2 [] [ text <| "Destination subdirectories " ]
         ]
-            ++ (model.destinationSubdirectories
+            ++ (model.filteredDestinationSubdirectories
                     |> List.sortBy (.name >> String.toLower)
                     |> List.map (viewFileInfo model)
                )
