@@ -2,4 +2,4 @@ elm-stuff
 /.vscode
 build
 frontend/src/elm.js
-frontend/wailsjs/go/main/App.d.ts
+frontend/wailsjs/go/main/*
