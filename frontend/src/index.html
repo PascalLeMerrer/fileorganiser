@@ -51,6 +51,18 @@
           app.ports.receiveError.send(msg);
         });
       });
+
+      // Open file chooser to select a source directory
+      app.ports.selectSourceDirectory.subscribe(function (directoryName) {
+        window.go.main.App.SelectDirectory(directoryName)
+        .then((result) =>
+          {
+            app.ports.receiveSelectedSourceDirectory.send(result);
+          }
+        ).catch(msg => {
+          app.ports.receiveError.send(msg);
+        });
+      });
   </script>
 </body>
 

@@ -1,7 +1,7 @@
 port module Main exposing (..)
 
 import Browser
-import Html exposing (Html, aside, button, div, footer, h2, header, input, main_, text)
+import Html exposing (Html, button, div, footer, h2, header, input, text)
 import Html.Attributes exposing (autocomplete, class, id, placeholder, type_, value)
 import Html.Events exposing (onClick, onInput)
 import Iso8601
@@ -77,10 +77,16 @@ port receiveCurrentDirectoryPath : (String -> msg) -> Sub msg
 port receiveDirectoryContent : (Json.Encode.Value -> msg) -> Sub msg
 
 
+port receiveError : (String -> msg) -> Sub msg
+
+
+port receiveSelectedSourceDirectory : (String -> msg) -> Sub msg
+
+
 port receiveSubDirectories : (Json.Encode.Value -> msg) -> Sub msg
 
 
-port receiveError : (String -> msg) -> Sub msg
+port selectSourceDirectory : String -> Cmd msg
 
 
 
@@ -131,11 +137,12 @@ type Msg
     = AdjustTimeZone Time.Zone
     | BackendReturnedError String
     | BackendReturnedCurrentDirPath String
+    | BackendReturnedSourceDirectoryPath String
     | BackendReturnedSourceDirectoryContent (List FileInfo)
     | BackendReturnedDestinationDirectories (List FileInfo)
-    | SetSourceDirectory String
     | UserChangedFilter String
     | UserClickedClearFilter
+    | UserClickedSourceDirectoryButton
     | NoOp
 
 
@@ -166,6 +173,12 @@ update msg model =
                 ]
             )
 
+        BackendReturnedDestinationDirectories fileInfos ->
+            ( { model | destinationSubdirectories = fileInfos }
+                |> filterDestinationDirectories
+            , Cmd.none
+            )
+
         BackendReturnedError errorMsg ->
             ( { model | error = Just errorMsg }, Cmd.none )
 
@@ -182,11 +195,18 @@ update msg model =
             , Cmd.none
             )
 
+        BackendReturnedSourceDirectoryPath path ->
+            if path == "" then
+                -- user canceled the selection
+                ( model, Cmd.none )
+
+            else
+                ( { model | sourceDirectoryPath = path }
+                , getDirectoryContent path
+                )
+
         NoOp ->
             ( model, Cmd.none )
-
-        SetSourceDirectory path ->
-            ( { model | sourceDirectoryPath = path }, Cmd.none )
 
         UserChangedFilter filteringString ->
             ( { model | filter = filteringString }
@@ -200,11 +220,8 @@ update msg model =
             , Cmd.none
             )
 
-        BackendReturnedDestinationDirectories fileInfos ->
-            ( { model | destinationSubdirectories = fileInfos }
-                |> filterDestinationDirectories
-            , Cmd.none
-            )
+        UserClickedSourceDirectoryButton ->
+            ( model, selectSourceDirectory model.sourceDirectoryPath )
 
 
 filterSourceFiles : Model -> Model
@@ -261,6 +278,7 @@ subscriptions _ =
         , receiveError BackendReturnedError
         , receiveCurrentDirectoryPath BackendReturnedCurrentDirPath
         , receiveSubDirectories (decodeFileInfoList BackendReturnedDestinationDirectories)
+        , receiveSelectedSourceDirectory BackendReturnedSourceDirectoryPath
         ]
 
 
@@ -350,6 +368,7 @@ viewSourceSubdirectories model =
     in
     div [ class "panel" ] <|
         [ h2 [] [ text <| "Source directory: " ++ currentDirName ]
+        , button [ onClick UserClickedSourceDirectoryButton ] [ text "..." ]
         ]
             ++ (model.sourceSubDirectories
                     |> List.sortBy (.name >> String.toLower)

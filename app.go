@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 // App struct
@@ -57,7 +58,6 @@ type FileInfo struct {
     ModTime time.Time
     IsDir   bool
 }
-
 
 
 
@@ -123,4 +123,8 @@ func (a *App) GetSubdirectoriesRecursively(dirName string) ([]FileInfo, error) {
 		    return nil
 		})
 	return result, err
+}
+
+func (a *App) SelectDirectory(defaultDirectory string) (string, error) {
+	return runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{DefaultDirectory: defaultDirectory})
 }
