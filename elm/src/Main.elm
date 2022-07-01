@@ -282,6 +282,7 @@ viewDate model time =
 
         day =
             String.fromInt (Time.toDay model.timezone time)
+                |> String.padLeft 2 '0'
 
         month =
             Time.toMonth model.timezone time
