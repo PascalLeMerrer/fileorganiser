@@ -8,8 +8,21 @@ import Iso8601
 import Json.Decode exposing (Decoder, list)
 import Json.Decode.Pipeline exposing (required)
 import Json.Encode
+import List.Extra
 import Task
 import Time exposing (Month(..), Posix)
+
+
+windowsPathSep =
+    "\\"
+
+
+
+-- antislash is doubled for escaping it
+
+
+unixPathSep =
+    "/"
 
 
 type alias FileInfo =
@@ -70,6 +83,7 @@ port receiveError : (String -> msg) -> Sub msg
 
 type alias Model =
     { error : Maybe String
+    , pathSeparator : String
     , sourceDirectoryFiles : List FileInfo
     , sourceDirectoryPath : String
     , sourceSubDirectories : List FileInfo
@@ -80,6 +94,7 @@ type alias Model =
 init : () -> ( Model, Cmd Msg )
 init _ =
     ( { error = Nothing
+      , pathSeparator = unixPathSep
       , sourceDirectoryFiles = []
       , sourceDirectoryPath = "."
       , sourceSubDirectories = []
@@ -115,7 +130,18 @@ update msg model =
             )
 
         BackendReturnedCurrentDirPath path ->
-            ( { model | sourceDirectoryPath = path }
+            let
+                pathSeparator =
+                    if String.contains windowsPathSep path then
+                        windowsPathSep
+
+                    else
+                        unixPathSep
+            in
+            ( { model
+                | sourceDirectoryPath = path
+                , pathSeparator = pathSeparator
+              }
             , loadDirectoryContent path
             )
 
@@ -222,8 +248,14 @@ viewFiles model =
 
 viewSourceSubirectories : Model -> Html Msg
 viewSourceSubirectories model =
+    let
+        currentDirName =
+            String.split model.pathSeparator model.sourceDirectoryPath
+                |> List.Extra.last
+                |> Maybe.withDefault "Error: cannot get current dir name"
+    in
     div [ class "panel" ] <|
-        [ h2 [] [ text "Source Directories" ]
+        [ h2 [] [ text <| "Source directory: " ++ currentDirName ]
         ]
             ++ (model.sourceSubDirectories
                     |> List.sortBy (.name >> String.toLower)
