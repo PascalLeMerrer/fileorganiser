@@ -80,6 +80,9 @@ port receiveDirectoryContent : (Json.Encode.Value -> msg) -> Sub msg
 port receiveError : (String -> msg) -> Sub msg
 
 
+port receiveSelectedDestinationDirectory : (String -> msg) -> Sub msg
+
+
 port receiveSelectedSourceDirectory : (String -> msg) -> Sub msg
 
 
@@ -89,12 +92,16 @@ port receiveSubDirectories : (Json.Encode.Value -> msg) -> Sub msg
 port selectSourceDirectory : String -> Cmd msg
 
 
+port selectDestinationDirectory : String -> Cmd msg
+
+
 
 -- MODEL
 
 
 type alias Model =
     { destinationDirectoryFiles : List FileInfo
+    , destinationDirectoryPath : String
     , destinationSubdirectories : List FileInfo
     , error : Maybe String
     , filter : String
@@ -111,6 +118,7 @@ type alias Model =
 init : () -> ( Model, Cmd Msg )
 init _ =
     ( { destinationDirectoryFiles = []
+      , destinationDirectoryPath = ""
       , destinationSubdirectories = []
       , error = Nothing
       , filter = ""
@@ -135,15 +143,17 @@ init _ =
 
 type Msg
     = AdjustTimeZone Time.Zone
-    | BackendReturnedError String
     | BackendReturnedCurrentDirPath String
-    | BackendReturnedSourceDirectoryPath String
-    | BackendReturnedSourceDirectoryContent (List FileInfo)
     | BackendReturnedDestinationDirectories (List FileInfo)
+    | BackendReturnedDestinationDirectoryPath String
+    | BackendReturnedError String
+    | BackendReturnedSourceDirectoryContent (List FileInfo)
+    | BackendReturnedSourceDirectoryPath String
+    | NoOp
     | UserChangedFilter String
     | UserClickedClearFilter
+    | UserClickedDestinationDirectoryButton
     | UserClickedSourceDirectoryButton
-    | NoOp
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -195,6 +205,16 @@ update msg model =
             , Cmd.none
             )
 
+        BackendReturnedDestinationDirectoryPath path ->
+            if path == "" then
+                -- user canceled the selection
+                ( model, Cmd.none )
+
+            else
+                ( { model | destinationDirectoryPath = path }
+                , getSubdirectories path
+                )
+
         BackendReturnedSourceDirectoryPath path ->
             if path == "" then
                 -- user canceled the selection
@@ -222,6 +242,9 @@ update msg model =
 
         UserClickedSourceDirectoryButton ->
             ( model, selectSourceDirectory model.sourceDirectoryPath )
+
+        UserClickedDestinationDirectoryButton ->
+            ( model, selectDestinationDirectory model.destinationDirectoryPath )
 
 
 filterSourceFiles : Model -> Model
@@ -274,11 +297,12 @@ filterByName filters fileInfo =
 subscriptions : Model -> Sub Msg
 subscriptions _ =
     Sub.batch
-        [ receiveDirectoryContent (decodeFileInfoList BackendReturnedSourceDirectoryContent)
+        [ receiveCurrentDirectoryPath BackendReturnedCurrentDirPath
+        , receiveDirectoryContent (decodeFileInfoList BackendReturnedSourceDirectoryContent)
         , receiveError BackendReturnedError
-        , receiveCurrentDirectoryPath BackendReturnedCurrentDirPath
-        , receiveSubDirectories (decodeFileInfoList BackendReturnedDestinationDirectories)
+        , receiveSelectedDestinationDirectory BackendReturnedDestinationDirectoryPath
         , receiveSelectedSourceDirectory BackendReturnedSourceDirectoryPath
+        , receiveSubDirectories (decodeFileInfoList BackendReturnedDestinationDirectories)
         ]
 
 
@@ -380,6 +404,7 @@ viewDestinationSubdirectories : Model -> Html Msg
 viewDestinationSubdirectories model =
     div [ class "panel" ] <|
         [ h2 [] [ text <| "Destination subdirectories " ]
+        , button [ onClick UserClickedDestinationDirectoryButton ] [ text "..." ]
         ]
             ++ (model.filteredDestinationSubdirectories
                     |> List.sortBy (.name >> String.toLower)
