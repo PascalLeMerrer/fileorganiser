@@ -1,9 +1,9 @@
 port module Main exposing (..)
 
 import Browser
-import Html exposing (Html, aside, button, div, footer, form, h2, header, input, main_, text)
+import Html exposing (Html, aside, button, div, footer, h2, header, input, main_, text)
 import Html.Attributes exposing (autocomplete, class, id, type_, value)
-import Html.Events exposing (onInput, onSubmit)
+import Html.Events exposing (onClick, onInput)
 import Iso8601
 import Json.Decode exposing (Decoder, list)
 import Json.Decode.Pipeline exposing (required)
@@ -83,8 +83,10 @@ port receiveError : (String -> msg) -> Sub msg
 
 type alias Model =
     { error : Maybe String
+    , filter : String
     , pathSeparator : String
     , sourceDirectoryFiles : List FileInfo
+    , filteredSourceDirectoryFiles : List FileInfo
     , sourceDirectoryPath : String
     , sourceSubDirectories : List FileInfo
     , timezone : Time.Zone
@@ -94,8 +96,10 @@ type alias Model =
 init : () -> ( Model, Cmd Msg )
 init _ =
     ( { error = Nothing
+      , filter = ""
       , pathSeparator = unixPathSep
       , sourceDirectoryFiles = []
+      , filteredSourceDirectoryFiles = []
       , sourceDirectoryPath = "."
       , sourceSubDirectories = []
       , timezone = Time.utc
@@ -117,13 +121,14 @@ type Msg
     | BackendReturnedCurrentDirPath String
     | BackendReturnedSourceDirectoryContent (List FileInfo)
     | SetSourceDirectory String
-    | Submit
+    | UserChangedFilter String
+    | UserClickedClearFilter
     | NoOp
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
-    case msg of
+    case Debug.log "msg" msg of
         AdjustTimeZone newZone ->
             ( { model | timezone = newZone }
             , Cmd.none
@@ -153,7 +158,11 @@ update msg model =
                 ( dirList, fileList ) =
                     List.partition .isDir directoryContent
             in
-            ( { model | sourceSubDirectories = dirList, sourceDirectoryFiles = fileList }
+            ( { model
+                | sourceSubDirectories = dirList
+                , sourceDirectoryFiles = fileList
+              }
+                |> filterSourceFiles
             , Cmd.none
             )
 
@@ -163,8 +172,39 @@ update msg model =
         SetSourceDirectory path ->
             ( { model | sourceDirectoryPath = path }, Cmd.none )
 
-        Submit ->
-            ( model, loadDirectoryContent model.sourceDirectoryPath )
+        UserChangedFilter filteringString ->
+            ( { model | filter = filteringString } |> filterSourceFiles
+            , Cmd.none
+            )
+
+        UserClickedClearFilter ->
+            ( { model | filter = "" } |> filterSourceFiles
+            , Cmd.none
+            )
+
+
+filterSourceFiles : Model -> Model
+filterSourceFiles model =
+    let
+        words =
+            String.words model.filter
+    in
+    case words of
+        [] ->
+            { model
+                | filteredSourceDirectoryFiles = model.sourceDirectoryFiles
+            }
+
+        _ ->
+            { model
+                | filteredSourceDirectoryFiles =
+                    List.filter (filterByName words) model.sourceDirectoryFiles
+            }
+
+
+filterByName : List String -> FileInfo -> Bool
+filterByName filters fileInfo =
+    List.all (\word -> String.contains word fileInfo.name) filters
 
 
 
@@ -211,20 +251,19 @@ view model =
 viewHeader : Model -> Html Msg
 viewHeader model =
     header []
-        [ form
+        [ div
             [ class "input-box"
-            , onSubmit Submit
             ]
             [ input
                 [ class "input"
-                , id "name"
+                , id "filter"
                 , type_ "text"
                 , autocomplete False
-                , onInput SetSourceDirectory
-                , value model.sourceDirectoryPath
+                , onInput UserChangedFilter
+                , value model.filter
                 ]
                 []
-            , button [ class "btn", type_ "submit" ] [ text "Open" ]
+            , button [ class "btn", onClick UserClickedClearFilter ] [ text "Clear" ]
             ]
         ]
 
@@ -268,7 +307,7 @@ viewSourceFiles model =
     div [ class "panel" ] <|
         [ h2 [] [ text "Source Files" ]
         ]
-            ++ (model.sourceDirectoryFiles
+            ++ (model.filteredSourceDirectoryFiles
                     |> List.sortBy (.name >> String.toLower)
                     |> List.map (viewFileInfo model)
                )
