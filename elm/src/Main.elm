@@ -52,6 +52,12 @@ main =
 port loadDirectoryContent : String -> Cmd msg
 
 
+port getCurrentDirectoryPath : () -> Cmd msg
+
+
+port receiveCurrentDirectoryPath : (String -> msg) -> Sub msg
+
+
 port receiveDirectoryContent : (Json.Encode.Value -> msg) -> Sub msg
 
 
@@ -79,7 +85,10 @@ init _ =
       , sourceSubDirectories = []
       , timezone = Time.utc
       }
-    , Task.perform AdjustTimeZone Time.here
+    , Cmd.batch
+        [ Task.perform AdjustTimeZone Time.here
+        , getCurrentDirectoryPath ()
+        ]
     )
 
 
@@ -90,6 +99,7 @@ init _ =
 type Msg
     = AdjustTimeZone Time.Zone
     | BackendReturnedError String
+    | BackendReturnedCurrentDirPath String
     | SetSourceDirectory String
     | Submit
     | FileInfoReceived (List FileInfo)
@@ -99,11 +109,18 @@ type Msg
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
-        SetSourceDirectory path ->
-            ( { model | sourceDirectoryPath = path }, Cmd.none )
+        AdjustTimeZone newZone ->
+            ( { model | timezone = newZone }
+            , Cmd.none
+            )
 
-        Submit ->
-            ( model, loadDirectoryContent model.sourceDirectoryPath )
+        BackendReturnedCurrentDirPath path ->
+            ( { model | sourceDirectoryPath = path }
+            , loadDirectoryContent path
+            )
+
+        BackendReturnedError errorMsg ->
+            ( { model | error = Just errorMsg }, Cmd.none )
 
         FileInfoReceived directoryContent ->
             let
@@ -117,13 +134,11 @@ update msg model =
         NoOp ->
             ( model, Cmd.none )
 
-        BackendReturnedError errorMsg ->
-            ( { model | error = Just errorMsg }, Cmd.none )
+        SetSourceDirectory path ->
+            ( { model | sourceDirectoryPath = path }, Cmd.none )
 
-        AdjustTimeZone newZone ->
-            ( { model | timezone = newZone }
-            , Cmd.none
-            )
+        Submit ->
+            ( model, loadDirectoryContent model.sourceDirectoryPath )
 
 
 
@@ -135,6 +150,7 @@ subscriptions _ =
     Sub.batch
         [ receiveDirectoryContent decodeFileInfoList
         , receiveError BackendReturnedError
+        , receiveCurrentDirectoryPath BackendReturnedCurrentDirPath
         ]
 
 

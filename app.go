@@ -58,6 +58,13 @@ type FileInfo struct {
 }
 
 
+
+
+func (a *App) GetCurrentDirectory() (string, error) {
+	return os.Getwd()
+}
+
+
 func (a *App) GetDirectoryContent(dirName string) ([]FileInfo, error) {
 	dir, err := os.Open(dirName)
 

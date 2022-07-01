@@ -15,6 +15,20 @@
   <script src="elm.js"></script>
   <script>
       const app = Elm.Main.init({ node: document.getElementById("elm") });
+
+      // Get current directory path
+      app.ports.getCurrentDirectoryPath.subscribe(function () {
+        window.go.main.App.GetCurrentDirectory()
+        .then((result) =>
+          {
+            app.ports.receiveCurrentDirectoryPath.send(result);
+          }
+        ).catch(msg => {
+          app.ports.receiveError.send(msg);
+        });
+      });
+
+      // Get directory content
       app.ports.loadDirectoryContent.subscribe(function (directoryName) {
         window.go.main.App.GetDirectoryContent(directoryName)
         .then((result) =>
