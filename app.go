@@ -58,8 +58,8 @@ type FileInfo struct {
 }
 
 
-func (a *App) GetDirectoryContent(name string) ([]FileInfo, error) {
-	dir, err := os.Open(name)
+func (a *App) GetDirectoryContent(dirName string) ([]FileInfo, error) {
+	dir, err := os.Open(dirName)
 
 	if err != nil {
 		return nil, err
@@ -76,6 +76,11 @@ func (a *App) GetDirectoryContent(name string) ([]FileInfo, error) {
     result := []FileInfo{}
 
     for _, entry := range fileList {
+    	isHidden, _ := isHidden(entry.Name(), dirName)
+    	if isHidden {
+    		continue
+    	}
+
         f := FileInfo{
             Name:    entry.Name(),
             Size:    entry.Size(),
