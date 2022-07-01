@@ -390,48 +390,72 @@ viewSourceSubdirectories model =
                 |> List.Extra.last
                 |> Maybe.withDefault "Error: cannot get current dir name"
     in
-    div [ class "panel" ] <|
-        [ h2 [] [ text <| "Source directory: " ++ currentDirName ]
-        , button [ onClick UserClickedSourceDirectoryButton ] [ text "..." ]
+    div [ class "panel" ]
+        [ div [ class "panel-header" ]
+            [ h2 [] [ text <| "Source directory: " ++ currentDirName ]
+            , button
+                [ class "btn"
+                , onClick UserClickedSourceDirectoryButton
+                ]
+                [ text "..." ]
+            ]
+        , div
+            [ class "panel-content" ]
+            (model.sourceSubDirectories
+                |> List.sortBy (.name >> String.toLower)
+                |> List.map (viewFileInfo model)
+            )
         ]
-            ++ (model.sourceSubDirectories
-                    |> List.sortBy (.name >> String.toLower)
-                    |> List.map (viewFileInfo model)
-               )
 
 
 viewDestinationSubdirectories : Model -> Html Msg
 viewDestinationSubdirectories model =
-    div [ class "panel" ] <|
-        [ h2 [] [ text <| "Destination subdirectories " ]
-        , button [ onClick UserClickedDestinationDirectoryButton ] [ text "..." ]
+    div [ class "panel" ]
+        [ div [ class "panel-header" ]
+            [ h2 [] [ text <| "Destination subdirectories " ]
+            , button
+                [ class "btn"
+                , onClick UserClickedDestinationDirectoryButton
+                ]
+                [ text "..." ]
+            ]
+        , div
+            [ class "panel-content" ]
+            (model.filteredDestinationSubdirectories
+                |> List.sortBy (.name >> String.toLower)
+                |> List.map (viewFileInfo model)
+            )
         ]
-            ++ (model.filteredDestinationSubdirectories
-                    |> List.sortBy (.name >> String.toLower)
-                    |> List.map (viewFileInfo model)
-               )
 
 
 viewSourceFiles : Model -> Html Msg
 viewSourceFiles model =
-    div [ class "panel" ] <|
-        [ h2 [] [ text "Source Files" ]
+    div [ class "panel" ]
+        [ div [ class "panel-header" ]
+            [ h2 [] [ text "Source Files" ]
+            ]
+        , div
+            [ class "panel-content" ]
+            (model.filteredSourceDirectoryFiles
+                |> List.sortBy (.name >> String.toLower)
+                |> List.map (viewFileInfo model)
+            )
         ]
-            ++ (model.filteredSourceDirectoryFiles
-                    |> List.sortBy (.name >> String.toLower)
-                    |> List.map (viewFileInfo model)
-               )
 
 
 viewDestinationFiles : Model -> Html Msg
 viewDestinationFiles model =
-    div [ class "panel" ] <|
-        [ h2 [] [ text "Destination Files" ]
+    div [ class "panel" ]
+        [ div [ class "panel-header" ]
+            [ h2 [] [ text "Destination Files" ]
+            ]
+        , div
+            [ class "panel-content" ]
+            (model.destinationDirectoryFiles
+                |> List.sortBy (.name >> String.toLower)
+                |> List.map (viewFileInfo model)
+            )
         ]
-            ++ (model.destinationDirectoryFiles
-                    |> List.sortBy (.name >> String.toLower)
-                    |> List.map (viewFileInfo model)
-               )
 
 
 viewFileInfo : Model -> FileInfo -> Html Msg
