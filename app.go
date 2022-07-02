@@ -102,6 +102,42 @@ func (a *App) GetDirectoryContent(dirName string) ([]FileInfo, error) {
 	return result, nil
 }
 
+func (a *App) GetDirectoryFiles(dirName string) ([]FileInfo, error) {
+	dir, err := os.Open(dirName)
+
+	if err != nil {
+		return nil, err
+	}
+
+	defer dir.Close()
+
+	fileList, err := dir.Readdir(0)
+
+	if err != nil {
+		return nil, err
+	}
+
+    result := []FileInfo{}
+
+    for _, entry := range fileList {
+    	isHidden, _ := isHidden(entry.Name(), dirName)
+    	if isHidden || entry.IsDir() {
+    		continue
+    	}
+
+        f := FileInfo{
+            Name:    entry.Name(),
+            Size:    entry.Size(),
+            Mode:    entry.Mode(),
+            ModTime: entry.ModTime(),
+            IsDir:   entry.IsDir(),
+        }
+        result = append(result, f)
+    }
+
+	return result, nil
+}
+
 func (a *App) GetSubdirectoriesRecursively(dirName string) ([]FileInfo, error) {
 	result := []FileInfo{}
 	err := filepath.Walk(dirName,

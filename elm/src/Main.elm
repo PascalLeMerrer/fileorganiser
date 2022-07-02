@@ -13,12 +13,12 @@ import Task
 import Time exposing (Month(..), Posix)
 
 
+
+-- antislash is doubled for escaping
+
+
 windowsPathSep =
     "\\"
-
-
-
--- antislash is doubled for escaping it
 
 
 unixPathSep =
@@ -64,19 +64,22 @@ main =
 -- PORTS
 
 
-port getDirectoryContent : String -> Cmd msg
+port getCurrentDirectoryPath : () -> Cmd msg
+
+
+port getDestinationDirectoryFiles : String -> Cmd msg
+
+
+port getSourceDirectoryContent : String -> Cmd msg
 
 
 port getSubdirectories : String -> Cmd msg
 
 
-port getCurrentDirectoryPath : () -> Cmd msg
-
-
 port receiveCurrentDirectoryPath : (String -> msg) -> Sub msg
 
 
-port receiveDirectoryContent : (Json.Encode.Value -> msg) -> Sub msg
+port receiveDestinationDirectoryFiles : (Json.Encode.Value -> msg) -> Sub msg
 
 
 port receiveError : (String -> msg) -> Sub msg
@@ -88,13 +91,16 @@ port receiveSelectedDestinationDirectory : (String -> msg) -> Sub msg
 port receiveSelectedSourceDirectory : (String -> msg) -> Sub msg
 
 
+port receiveSourceDirectoryContent : (Json.Encode.Value -> msg) -> Sub msg
+
+
 port receiveSubDirectories : (Json.Encode.Value -> msg) -> Sub msg
 
 
-port selectSourceDirectory : String -> Cmd msg
-
-
 port selectDestinationDirectory : String -> Cmd msg
+
+
+port selectSourceDirectory : String -> Cmd msg
 
 
 
@@ -147,6 +153,7 @@ type Msg
     = AdjustTimeZone Time.Zone
     | BackendReturnedCurrentDirPath String
     | BackendReturnedDestinationDirectories (List FileInfo)
+    | BackendReturnedDestinationFiles (List FileInfo)
     | BackendReturnedDestinationDirectoryPath String
     | BackendReturnedError String
     | BackendReturnedSourceDirectoryContent (List FileInfo)
@@ -182,8 +189,9 @@ update msg model =
                 , pathSeparator = pathSeparator
               }
             , Cmd.batch
-                [ getDirectoryContent path
+                [ getSourceDirectoryContent path
                 , getSubdirectories path
+                , getDestinationDirectoryFiles path
                 ]
             )
 
@@ -209,6 +217,13 @@ update msg model =
             , Cmd.none
             )
 
+        BackendReturnedDestinationFiles fileList ->
+            ( { model
+                | destinationDirectoryFiles = fileList
+              }
+            , Cmd.none
+            )
+
         BackendReturnedDestinationDirectoryPath path ->
             if path == "" then
                 -- user canceled the selection
@@ -216,7 +231,10 @@ update msg model =
 
             else
                 ( { model | destinationDirectoryPath = path }
-                , getSubdirectories path
+                , Cmd.batch
+                    [ getSubdirectories path
+                    , getDestinationDirectoryFiles path
+                    ]
                 )
 
         BackendReturnedSourceDirectoryPath path ->
@@ -226,7 +244,7 @@ update msg model =
 
             else
                 ( { model | sourceDirectoryPath = path }
-                , getDirectoryContent path
+                , getSourceDirectoryContent path
                 )
 
         NoOp ->
@@ -327,7 +345,8 @@ subscriptions : Model -> Sub Msg
 subscriptions _ =
     Sub.batch
         [ receiveCurrentDirectoryPath BackendReturnedCurrentDirPath
-        , receiveDirectoryContent (decodeFileInfoList BackendReturnedSourceDirectoryContent)
+        , receiveSourceDirectoryContent (decodeFileInfoList BackendReturnedSourceDirectoryContent)
+        , receiveDestinationDirectoryFiles (decodeFileInfoList BackendReturnedDestinationFiles)
         , receiveError BackendReturnedError
         , receiveSelectedDestinationDirectory BackendReturnedDestinationDirectoryPath
         , receiveSelectedSourceDirectory BackendReturnedSourceDirectoryPath

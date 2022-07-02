@@ -24,6 +24,7 @@
             app.ports.receiveCurrentDirectoryPath.send(result);
           }
         ).catch(msg => {
+          console.error(msg);
           app.ports.receiveError.send(msg);
         });
       });
@@ -33,9 +34,23 @@
         window.go.main.App.GetDirectoryContent(directoryName)
         .then((result) =>
           {
-            app.ports.receiveDirectoryContent.send(result);
+            app.ports.receiveSourceDirectoryContent.send(result);
           }
         ).catch(msg => {
+          console.error(msg);
+          app.ports.receiveError.send(msg);
+        });
+      });
+
+      // Get files of selected destination directory
+      app.ports.getDestinationDirectoryFiles.subscribe(function (directoryName) {
+        window.go.main.App.GetDirectoryFiles(directoryName)
+        .then((result) =>
+          {
+            app.ports.receiveDestinationDirectoryFiles.send(result);
+          }
+        ).catch(msg => {
+          console.error(msg);
           app.ports.receiveError.send(msg);
         });
       });
@@ -48,6 +63,7 @@
             app.ports.receiveSubDirectories.send(result);
           }
         ).catch(msg => {
+          console.error(msg);
           app.ports.receiveError.send(msg);
         });
       });
@@ -60,6 +76,7 @@
             app.ports.receiveSelectedSourceDirectory.send(result);
           }
         ).catch(msg => {
+          console.error(msg);
           app.ports.receiveError.send(msg);
         });
       });
@@ -72,6 +89,7 @@
             app.ports.receiveSelectedDestinationDirectory.send(result);
           }
         ).catch(msg => {
+          console.error(msg);
           app.ports.receiveError.send(msg);
         });
       });
