@@ -28,8 +28,8 @@
         });
       });
 
-      // Get directory content
-      app.ports.getDirectoryContent.subscribe(function (directoryName) {
+      // Get source directory content
+      app.ports.getSourceDirectoryContent.subscribe(function (directoryName) {
         window.go.main.App.GetDirectoryContent(directoryName)
         .then((result) =>
           {
@@ -40,7 +40,7 @@
         });
       });
 
-      // Get subdirectories
+      // Get subdirectories of selected destination directory
       app.ports.getSubdirectories.subscribe(function (directoryName) {
         window.go.main.App.GetSubdirectoriesRecursively(directoryName)
         .then((result) =>
@@ -53,8 +53,8 @@
       });
 
       // Open file chooser to select a source directory
-      app.ports.selectSourceDirectory.subscribe(function (directoryName) {
-        window.go.main.App.SelectDirectory(directoryName)
+      app.ports.selectSourceDirectory.subscribe(function (directoryName, title) {
+        window.go.main.App.SelectDirectory(directoryName, title)
         .then((result) =>
           {
             app.ports.receiveSelectedSourceDirectory.send(result);
@@ -65,8 +65,8 @@
       });
 
       // Open file chooser to select a destination directory
-      app.ports.selectDestinationDirectory.subscribe(function (directoryName) {
-        window.go.main.App.SelectDirectory(directoryName)
+      app.ports.selectDestinationDirectory.subscribe(function (directoryName, title) {
+        window.go.main.App.SelectDirectory(directoryName, title)
         .then((result) =>
           {
             app.ports.receiveSelectedDestinationDirectory.send(result);

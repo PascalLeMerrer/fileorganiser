@@ -125,6 +125,10 @@ func (a *App) GetSubdirectoriesRecursively(dirName string) ([]FileInfo, error) {
 	return result, err
 }
 
-func (a *App) SelectDirectory(defaultDirectory string) (string, error) {
-	return runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{DefaultDirectory: defaultDirectory})
+func (a *App) SelectDirectory(defaultDirectory string, title string) (string, error) {
+	options := runtime.OpenDialogOptions{
+		DefaultDirectory: defaultDirectory,
+		Title: title,
+	}
+	return runtime.OpenDirectoryDialog(a.ctx, options)
 }
