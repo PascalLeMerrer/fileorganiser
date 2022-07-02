@@ -6,7 +6,7 @@ import Html.Attributes exposing (autocomplete, class, id, placeholder, type_, va
 import Html.Events exposing (onClick, onInput)
 import Iso8601
 import Json.Decode exposing (Decoder, list)
-import Json.Decode.Pipeline exposing (required)
+import Json.Decode.Pipeline exposing (hardcoded, required)
 import Json.Encode
 import List.Extra
 import Task
@@ -26,22 +26,24 @@ unixPathSep =
 
 
 type alias FileInfo =
-    { name : String
-    , size : Int
+    { isDir : Bool
     , mode : Int
     , modTime : Posix
-    , isDir : Bool
+    , name : String
+    , isSelected : Bool
+    , size : Int
     }
 
 
 fileInfoDecoder : Decoder FileInfo
 fileInfoDecoder =
     Json.Decode.succeed FileInfo
-        |> required "Name" Json.Decode.string
-        |> required "Size" Json.Decode.int
+        |> required "IsDir" Json.Decode.bool
         |> required "Mode" Json.Decode.int
         |> required "ModTime" Iso8601.decoder
-        |> required "IsDir" Json.Decode.bool
+        |> required "Name" Json.Decode.string
+        |> hardcoded False
+        |> required "Size" Json.Decode.int
 
 
 
@@ -153,6 +155,8 @@ type Msg
     | UserChangedFilter String
     | UserClickedClearFilter
     | UserClickedDestinationDirectoryButton
+    | UserClickedSourceFile FileInfo
+    | UserClickedDestinationFile FileInfo
     | UserClickedSourceDirectoryButton
 
 
@@ -245,6 +249,31 @@ update msg model =
 
         UserClickedDestinationDirectoryButton ->
             ( model, selectDestinationDirectory model.destinationDirectoryPath )
+
+        UserClickedSourceFile fileInfo ->
+            let
+                newFileInfo =
+                    { fileInfo | isSelected = not fileInfo.isSelected }
+
+                updatedSourceFiles =
+                    List.Extra.updateIf ((==) fileInfo) (\_ -> newFileInfo) model.sourceDirectoryFiles
+            in
+            ( { model | sourceDirectoryFiles = updatedSourceFiles }
+                |> filterSourceFiles
+            , Cmd.none
+            )
+
+        UserClickedDestinationFile fileInfo ->
+            let
+                newFileInfo =
+                    { fileInfo | isSelected = not fileInfo.isSelected }
+
+                updatedDestinationFiles =
+                    List.Extra.updateIf ((==) fileInfo) (\_ -> newFileInfo) model.destinationDirectoryFiles
+            in
+            ( { model | destinationDirectoryFiles = updatedDestinationFiles }
+            , Cmd.none
+            )
 
 
 filterSourceFiles : Model -> Model
@@ -403,7 +432,8 @@ viewSourceSubdirectories model =
             [ class "panel-content" ]
             (model.sourceSubDirectories
                 |> List.sortBy (.name >> String.toLower)
-                |> List.map (viewFileInfo model)
+                |> List.map (viewFileInfo model UserClickedSourceFile)
+             -- FIXME
             )
         ]
 
@@ -423,7 +453,8 @@ viewDestinationSubdirectories model =
             [ class "panel-content" ]
             (model.filteredDestinationSubdirectories
                 |> List.sortBy (.name >> String.toLower)
-                |> List.map (viewFileInfo model)
+                |> List.map (viewFileInfo model UserClickedSourceFile)
+             -- FIXME
             )
         ]
 
@@ -438,7 +469,7 @@ viewSourceFiles model =
             [ class "panel-content" ]
             (model.filteredSourceDirectoryFiles
                 |> List.sortBy (.name >> String.toLower)
-                |> List.map (viewFileInfo model)
+                |> List.map (viewFileInfo model UserClickedSourceFile)
             )
         ]
 
@@ -453,19 +484,35 @@ viewDestinationFiles model =
             [ class "panel-content" ]
             (model.destinationDirectoryFiles
                 |> List.sortBy (.name >> String.toLower)
-                |> List.map (viewFileInfo model)
+                |> List.map (viewFileInfo model UserClickedDestinationFile)
+             --FIXME UserClickedDestinationFile
             )
         ]
 
 
-viewFileInfo : Model -> FileInfo -> Html Msg
-viewFileInfo model fileInfo =
+viewFileInfo : Model -> (FileInfo -> Msg) -> FileInfo -> Html Msg
+viewFileInfo model onClickMsg fileInfo =
     if fileInfo.isDir then
-        div [ class "fileinfo" ] [ text <| fileInfo.name ]
+        div
+            [ class "fileinfo"
+            , onClick (onClickMsg fileInfo)
+            ]
+            [ text <| fileInfo.name ]
 
     else
-        div [ class "fileinfo" ]
-            [ div [ class "filename" ] [ text fileInfo.name ]
+        let
+            className =
+                if fileInfo.isSelected then
+                    "filename selected"
+
+                else
+                    "filename"
+        in
+        div
+            [ class "fileinfo"
+            , onClick (onClickMsg fileInfo)
+            ]
+            [ div [ class className ] [ text fileInfo.name ]
             , div [] [ text <| String.fromInt fileInfo.size ]
             , div [ class "filemodificationdate" ] [ viewDate model fileInfo.modTime ]
             ]
