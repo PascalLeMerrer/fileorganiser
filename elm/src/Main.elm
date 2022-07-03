@@ -264,6 +264,23 @@ update msg model =
                     ]
                 )
 
+        BackendReturnedMovedFiles fileInfos ->
+            let
+                command : Command
+                command =
+                    { operation = Move
+                    , files = fileInfos
+                    , destination = Just model.destinationDirectoryPath
+                    , source = Just model.sourceDirectoryPath
+                    }
+            in
+            ( { model | history = command :: model.history }
+            , Cmd.batch
+                [ getSourceDirectoryContent model.sourceDirectoryPath
+                , getDestinationDirectoryFiles model.destinationDirectoryPath
+                ]
+            )
+
         BackendReturnedSourceDirectoryPath path ->
             if path == "" then
                 -- user canceled the selection
@@ -338,23 +355,6 @@ update msg model =
             in
             ( { model | destinationDirectoryFiles = updatedDestinationFiles }
             , Cmd.none
-            )
-
-        BackendReturnedMovedFiles fileInfos ->
-            let
-                command : Command
-                command =
-                    { operation = Move
-                    , files = fileInfos
-                    , destination = Just model.destinationDirectoryPath
-                    , source = Just model.sourceDirectoryPath
-                    }
-            in
-            ( { model | history = command :: model.history }
-            , Cmd.batch
-                [ getSourceDirectoryContent model.sourceDirectoryPath
-                , getDestinationDirectoryFiles model.destinationDirectoryPath
-                ]
             )
 
 
