@@ -38,12 +38,15 @@ type alias FileInfo =
 
 type Operation
     = Move
+    | Rename
+    | Delete
 
 
 type alias Command =
     { operation : Operation
-    , origin : List FileInfo -- the files / dirs affected by the operation
-    , target : Maybe String -- destination dir if any
+    , files : List FileInfo -- the files / dirs affected by the operation
+    , destination : Maybe String -- destination dir if any
+    , source : Maybe String -- source dir if any
     }
 
 
@@ -278,12 +281,15 @@ update msg model =
 
                 modelWithPressedKeys =
                     { model
-                        | pressedKeys = pressedKeys
+                        | pressedKeys = Debug.log "pressedKeys" pressedKeys
                     }
             in
             case Debug.log "maybeKeyChange" maybeKeyChange of
                 Just (KeyDown (Character "m")) ->
                     moveSelectedSourceFiles modelWithPressedKeys
+
+                Just (KeyDown (Character "u")) ->
+                    cancelMove modelWithPressedKeys
 
                 _ ->
                     ( model, Cmd.none )
@@ -335,8 +341,16 @@ update msg model =
             )
 
         BackendReturnedMovedFiles fileInfos ->
-            -- TODO use the returned list
-            ( model
+            let
+                command : Command
+                command =
+                    { operation = Move
+                    , files = fileInfos
+                    , destination = Just model.destinationDirectoryPath
+                    , source = Just model.sourceDirectoryPath
+                    }
+            in
+            ( { model | history = command :: model.history }
             , Cmd.batch
                 [ getSourceDirectoryContent model.sourceDirectoryPath
                 , getDestinationDirectoryFiles model.destinationDirectoryPath
@@ -390,15 +404,45 @@ filterByName filters fileInfo =
 moveSelectedSourceFiles : Model -> ( Model, Cmd Msg )
 moveSelectedSourceFiles model =
     let
+        filesToMove : List String
         filesToMove =
             model.filteredSourceDirectoryFiles
                 |> List.filter .isSelected
                 |> List.map (\fileinfo -> model.sourceDirectoryPath ++ model.pathSeparator ++ fileinfo.name)
-                |> Debug.log "filesToMove"
     in
     ( model
     , moveFiles ( filesToMove, model.destinationDirectoryPath )
     )
+
+
+cancelMove : Model -> ( Model, Cmd Msg )
+cancelMove model =
+    let
+        commandToCancel =
+            model.history
+                |> List.head
+    in
+    case commandToCancel of
+        Just command ->
+            let
+                source =
+                    command.destination
+                        |> Maybe.withDefault ""
+
+                filesToMove =
+                    command.files
+                        |> List.map (\f -> source ++ model.pathSeparator ++ f.name)
+
+                destination =
+                    command.source
+                        |> Maybe.withDefault ""
+            in
+            ( model
+            , moveFiles ( filesToMove, destination )
+            )
+
+        Nothing ->
+            ( model, Cmd.none )
 
 
 
