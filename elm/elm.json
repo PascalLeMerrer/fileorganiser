@@ -13,6 +13,8 @@
             "elm/json": "1.1.3",
             "elm/time": "1.0.0",
             "elm-community/list-extra": "8.5.2",
+            "ohanhi/keyboard": "2.0.1",
+            "robinheghan/keyboard-events": "1.0.0",
             "rtfeldman/elm-iso8601-date-strings": "1.1.4"
         },
         "indirect": {

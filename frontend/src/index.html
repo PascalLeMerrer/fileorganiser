@@ -93,6 +93,22 @@
           app.ports.receiveError.send(msg);
         });
       });
+
+      // Moves a list of files to the given directory
+      app.ports.moveFiles.subscribe(function (params) {
+        let sourceFiles = params[0];
+        let directoryName = params[1];
+        window.go.main.App.Move(sourceFiles, directoryName)
+        .then((result) =>
+          {
+            app.ports.receiveFilesMoved.send(result);
+          }
+        ).catch(msg => {
+          console.error(msg);
+          app.ports.receiveError.send(msg);
+        });
+      });
+
   </script>
 </body>
 

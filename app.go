@@ -168,3 +168,28 @@ func (a *App) SelectDirectory(defaultDirectory string, title string) (string, er
 	}
 	return runtime.OpenDirectoryDialog(a.ctx, options)
 }
+
+func (a *App) Move(sourceFiles []string, destinationDirectory string) ([]FileInfo, error) {
+	result := []FileInfo{}
+	for _, sourcePath := range sourceFiles {
+		filename := filepath.Base(sourcePath)
+		newLocation := filepath.Join(destinationDirectory, filename)
+		err := os.Rename(sourcePath, newLocation)
+		if err != nil {
+			return nil, err
+		}
+		info, err := os.Stat(newLocation)
+		if err != nil {
+			return nil, err
+		}
+		f := FileInfo{
+            Name:    info.Name(),
+            Size:    info.Size(),
+            Mode:    info.Mode(),
+            ModTime: info.ModTime(),
+            IsDir:   info.IsDir(),
+        }
+        result = append(result, f)
+	}
+	return result, nil
+}

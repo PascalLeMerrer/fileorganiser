@@ -8,6 +8,7 @@ import Iso8601
 import Json.Decode exposing (Decoder, list)
 import Json.Decode.Pipeline exposing (hardcoded, required)
 import Json.Encode
+import Keyboard exposing (Key(..), KeyChange(..))
 import List.Extra
 import Task
 import Time exposing (Month(..), Posix)
@@ -32,6 +33,17 @@ type alias FileInfo =
     , name : String
     , isSelected : Bool
     , size : Int
+    }
+
+
+type Operation
+    = Move
+
+
+type alias Command =
+    { operation : Operation
+    , origin : List FileInfo -- the files / dirs affected by the operation
+    , target : Maybe String -- destination dir if any
     }
 
 
@@ -76,6 +88,9 @@ port getSourceDirectoryContent : String -> Cmd msg
 port getSubdirectories : String -> Cmd msg
 
 
+port moveFiles : ( List String, String ) -> Cmd msg
+
+
 port receiveCurrentDirectoryPath : (String -> msg) -> Sub msg
 
 
@@ -83,6 +98,9 @@ port receiveDestinationDirectoryFiles : (Json.Encode.Value -> msg) -> Sub msg
 
 
 port receiveError : (String -> msg) -> Sub msg
+
+
+port receiveFilesMoved : (Json.Encode.Value -> msg) -> Sub msg
 
 
 port receiveSelectedDestinationDirectory : (String -> msg) -> Sub msg
@@ -115,7 +133,9 @@ type alias Model =
     , filter : String
     , filteredDestinationSubdirectories : List FileInfo
     , filteredSourceDirectoryFiles : List FileInfo
+    , history : List Command
     , pathSeparator : String
+    , pressedKeys : List Key
     , sourceDirectoryFiles : List FileInfo
     , sourceDirectoryPath : String
     , sourceSubDirectories : List FileInfo
@@ -132,7 +152,9 @@ init _ =
       , filter = ""
       , filteredDestinationSubdirectories = []
       , filteredSourceDirectoryFiles = []
+      , history = []
       , pathSeparator = unixPathSep
+      , pressedKeys = []
       , sourceDirectoryFiles = []
       , sourceDirectoryPath = "."
       , sourceSubDirectories = []
@@ -156,8 +178,10 @@ type Msg
     | BackendReturnedDestinationFiles (List FileInfo)
     | BackendReturnedDestinationDirectoryPath String
     | BackendReturnedError String
+    | BackendReturnedMovedFiles (List FileInfo)
     | BackendReturnedSourceDirectoryContent (List FileInfo)
     | BackendReturnedSourceDirectoryPath String
+    | UserPressedKey Keyboard.Msg
     | NoOp
     | UserChangedFilter String
     | UserClickedClearFilter
@@ -169,7 +193,7 @@ type Msg
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
-    case Debug.log "msg" msg of
+    case msg of
         AdjustTimeZone newZone ->
             ( { model | timezone = newZone }
             , Cmd.none
@@ -247,6 +271,23 @@ update msg model =
                 , getSourceDirectoryContent path
                 )
 
+        UserPressedKey keyMsg ->
+            let
+                ( pressedKeys, maybeKeyChange ) =
+                    Keyboard.updateWithKeyChange Keyboard.anyKeyOriginal keyMsg model.pressedKeys
+
+                modelWithPressedKeys =
+                    { model
+                        | pressedKeys = pressedKeys
+                    }
+            in
+            case Debug.log "maybeKeyChange" maybeKeyChange of
+                Just (KeyDown (Character "m")) ->
+                    moveSelectedSourceFiles modelWithPressedKeys
+
+                _ ->
+                    ( model, Cmd.none )
+
         NoOp ->
             ( model, Cmd.none )
 
@@ -293,6 +334,15 @@ update msg model =
             , Cmd.none
             )
 
+        BackendReturnedMovedFiles fileInfos ->
+            -- TODO use the returned list
+            ( model
+            , Cmd.batch
+                [ getSourceDirectoryContent model.sourceDirectoryPath
+                , getDestinationDirectoryFiles model.destinationDirectoryPath
+                ]
+            )
+
 
 filterSourceFiles : Model -> Model
 filterSourceFiles model =
@@ -337,6 +387,20 @@ filterByName filters fileInfo =
     List.all (\word -> String.contains word fileInfo.name) filters
 
 
+moveSelectedSourceFiles : Model -> ( Model, Cmd Msg )
+moveSelectedSourceFiles model =
+    let
+        filesToMove =
+            model.filteredSourceDirectoryFiles
+                |> List.filter .isSelected
+                |> List.map (\fileinfo -> model.sourceDirectoryPath ++ model.pathSeparator ++ fileinfo.name)
+                |> Debug.log "filesToMove"
+    in
+    ( model
+    , moveFiles ( filesToMove, model.destinationDirectoryPath )
+    )
+
+
 
 -- SUBSCRIPTIONS
 
@@ -348,9 +412,11 @@ subscriptions _ =
         , receiveSourceDirectoryContent (decodeFileInfoList BackendReturnedSourceDirectoryContent)
         , receiveDestinationDirectoryFiles (decodeFileInfoList BackendReturnedDestinationFiles)
         , receiveError BackendReturnedError
+        , receiveFilesMoved (decodeFileInfoList BackendReturnedMovedFiles)
         , receiveSelectedDestinationDirectory BackendReturnedDestinationDirectoryPath
         , receiveSelectedSourceDirectory BackendReturnedSourceDirectoryPath
         , receiveSubDirectories (decodeFileInfoList BackendReturnedDestinationDirectories)
+        , Sub.map UserPressedKey Keyboard.subscriptions
         ]
 
 
