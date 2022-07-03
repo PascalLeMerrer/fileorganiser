@@ -101,7 +101,7 @@
         window.go.main.App.Move(sourceFiles, directoryName)
         .then((result) =>
           {
-            app.ports.receiveFilesMoved.send(result);
+            app.ports.receiveMovedFiles.send(result);
           }
         ).catch(msg => {
           console.error(msg);

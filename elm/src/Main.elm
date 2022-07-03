@@ -103,7 +103,7 @@ port receiveDestinationDirectoryFiles : (Json.Encode.Value -> msg) -> Sub msg
 port receiveError : (String -> msg) -> Sub msg
 
 
-port receiveFilesMoved : (Json.Encode.Value -> msg) -> Sub msg
+port receiveMovedFiles : (Json.Encode.Value -> msg) -> Sub msg
 
 
 port receiveSelectedDestinationDirectory : (String -> msg) -> Sub msg
@@ -456,7 +456,7 @@ subscriptions _ =
         , receiveSourceDirectoryContent (decodeFileInfoList BackendReturnedSourceDirectoryContent)
         , receiveDestinationDirectoryFiles (decodeFileInfoList BackendReturnedDestinationFiles)
         , receiveError BackendReturnedError
-        , receiveFilesMoved (decodeFileInfoList BackendReturnedMovedFiles)
+        , receiveMovedFiles (decodeFileInfoList BackendReturnedMovedFiles)
         , receiveSelectedDestinationDirectory BackendReturnedDestinationDirectoryPath
         , receiveSelectedSourceDirectory BackendReturnedSourceDirectoryPath
         , receiveSubDirectories (decodeFileInfoList BackendReturnedDestinationDirectories)
