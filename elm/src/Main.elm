@@ -577,16 +577,52 @@ cancelRenaming command model =
     )
 
 
+selectAllFiles : Model -> Target -> ( Model, Cmd Msg )
+selectAllFiles model target =
+    case target of
+        Source ->
+            let
+                -- TODO should we selected filtered files only?
+                updatedFiles =
+                    model.sourceDirectoryFiles
+                        |> List.map (\f -> { f | isSelected = True })
+            in
+            ( { model
+                | sourceDirectoryFiles = updatedFiles
+              }
+                |> filterSourceFiles
+            , Cmd.none
+            )
+
+        Destination ->
+            let
+                updatedFiles =
+                    model.destinationDirectoryFiles
+                        |> List.map (\f -> { f | isSelected = True })
+            in
+            ( { model
+                | destinationDirectoryFiles = updatedFiles
+              }
+            , Cmd.none
+            )
+
+
 processKeyboardShortcut : Model -> Target -> KeyboardEvent -> ( Model, Cmd Msg )
 processKeyboardShortcut model target event =
     case ( event.keyCode, event.ctrlKey, event.metaKey ) of
+        ( Key.F2, False, False ) ->
+            renameSelectedFile model
+
+        ( Key.A, True, False ) ->
+            selectAllFiles model target
+
+        ( Key.A, False, True ) ->
+            selectAllFiles model target
+
         ( Key.M, False, False ) ->
             moveSelectedSourceFiles model
 
         ( Key.R, False, False ) ->
-            renameSelectedFile model
-
-        ( Key.F2, False, False ) ->
             renameSelectedFile model
 
         ( Key.U, False, False ) ->
