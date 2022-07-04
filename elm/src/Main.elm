@@ -4,7 +4,7 @@ import Browser
 import Filesize
 import Html exposing (Html, button, div, footer, form, h2, header, input, text)
 import Html.Attributes exposing (autocomplete, autofocus, class, id, placeholder, tabindex, type_, value)
-import Html.Events exposing (on, onClick, onInput, onSubmit)
+import Html.Events as Events exposing (onClick, onInput, onSubmit)
 import Iso8601
 import Json.Decode exposing (Decoder, list)
 import Json.Decode.Pipeline exposing (hardcoded, required)
@@ -722,22 +722,51 @@ viewHeader model =
 
 viewLeftSide : Model -> Html Msg
 viewLeftSide model =
+    let
+        conditionalAttributes =
+            case model.editedFile of
+                Just a ->
+                    []
+
+                Nothing ->
+                    [ Events.preventDefaultOn "keydown" (keyDecoder Source) ]
+    in
     div
-        [ id "container-left"
-        , tabindex 1
-        , on "keydown" (Json.Decode.map (UserPressedKey Source) decodeKeyboardEvent)
-        ]
+        ([ id "container-left"
+         , tabindex 1
+         ]
+            ++ conditionalAttributes
+        )
     <|
         viewSource model
 
 
+keyDecoder : Target -> Json.Decode.Decoder ( Msg, Bool )
+keyDecoder target =
+    decodeKeyboardEvent
+        |> Json.Decode.map
+            (\key ->
+                ( UserPressedKey target key, True )
+            )
+
+
 viewRightSide : Model -> Html Msg
 viewRightSide model =
+    let
+        conditionalAttributes =
+            case model.editedFile of
+                Just a ->
+                    []
+
+                Nothing ->
+                    [ Events.preventDefaultOn "keydown" (keyDecoder Destination) ]
+    in
     div
-        [ id "container-right"
-        , tabindex 2
-        , on "keydown" (Json.Decode.map (UserPressedKey Destination) decodeKeyboardEvent)
-        ]
+        ([ id "container-right"
+         , tabindex 2
+         ]
+            ++ conditionalAttributes
+        )
     <|
         viewDestination model
 
