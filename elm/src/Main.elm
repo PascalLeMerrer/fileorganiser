@@ -2,13 +2,14 @@ port module Main exposing (..)
 
 import Browser
 import Html exposing (Html, button, div, footer, form, h2, header, input, text)
-import Html.Attributes exposing (autocomplete, autofocus, class, id, placeholder, type_, value)
-import Html.Events exposing (onClick, onInput, onSubmit)
+import Html.Attributes exposing (autocomplete, autofocus, class, id, placeholder, tabindex, type_, value)
+import Html.Events exposing (on, onClick, onInput, onSubmit)
 import Iso8601
 import Json.Decode exposing (Decoder, list)
 import Json.Decode.Pipeline exposing (hardcoded, required)
 import Json.Encode
-import Keyboard exposing (Key(..), KeyChange(..))
+import Keyboard.Event exposing (KeyboardEvent, decodeKeyboardEvent)
+import Keyboard.Key as Key
 import List.Extra
 import Task
 import Time exposing (Month(..), Posix)
@@ -150,7 +151,6 @@ type alias Model =
     , filteredSourceDirectoryFiles : List FileInfo
     , history : List Command
     , pathSeparator : String
-    , pressedKeys : List Key
     , sourceDirectoryFiles : List FileInfo
     , sourceDirectoryPath : String
     , sourceSubDirectories : List FileInfo
@@ -171,7 +171,6 @@ init _ =
       , filteredSourceDirectoryFiles = []
       , history = []
       , pathSeparator = unixPathSep
-      , pressedKeys = []
       , sourceDirectoryFiles = []
       , sourceDirectoryPath = "."
       , sourceSubDirectories = []
@@ -207,8 +206,13 @@ type Msg
     | UserClickedDestinationFile FileInfo
     | UserClickedSourceDirectoryButton
     | UserModifiedFileName String
-    | UserPressedKey Keyboard.Msg
+    | UserPressedKey Target KeyboardEvent
     | UserValidatedFilename
+
+
+type Target
+    = Source
+    | Destination
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -354,10 +358,10 @@ update msg model =
                 , getSourceDirectoryContent path
                 )
 
-        UserPressedKey keyMsg ->
+        UserPressedKey target event ->
             case model.editedFile of
                 Nothing ->
-                    processKeyboardShortcut model keyMsg
+                    processKeyboardShortcut model target event
 
                 _ ->
                     ( model, Cmd.none )
@@ -572,35 +576,17 @@ cancelRenaming command model =
     )
 
 
-processKeyboardShortcut : Model -> Keyboard.Msg -> ( Model, Cmd Msg )
-processKeyboardShortcut model keyMsg =
-    let
-        ( pressedKeys, maybeKeyChange ) =
-            Keyboard.updateWithKeyChange Keyboard.anyKeyOriginal keyMsg model.pressedKeys
+processKeyboardShortcut : Model -> Target -> KeyboardEvent -> ( Model, Cmd Msg )
+processKeyboardShortcut model target event =
+    case ( Debug.log "KeyCode" event.keyCode, event.ctrlKey ) of
+        ( Key.M, False ) ->
+            moveSelectedSourceFiles model
 
-        modelWithPressedKeys =
-            { model
-                | pressedKeys = Debug.log "pressedKeys" pressedKeys
-            }
-    in
-    case Debug.log "maybeKeyChange" maybeKeyChange of
-        Just (KeyDown (Character "m")) ->
-            moveSelectedSourceFiles modelWithPressedKeys
+        ( Key.R, False ) ->
+            renameSelectedFile model
 
-        Just (KeyUp (Character "m")) ->
-            moveSelectedSourceFiles modelWithPressedKeys
-
-        Just (KeyDown (Character "r")) ->
-            renameSelectedFile modelWithPressedKeys
-
-        Just (KeyUp (Character "r")) ->
-            renameSelectedFile modelWithPressedKeys
-
-        Just (KeyDown (Character "u")) ->
-            cancel modelWithPressedKeys
-
-        Just (KeyUp (Character "u")) ->
-            cancel modelWithPressedKeys
+        ( Key.U, False ) ->
+            cancel model
 
         _ ->
             ( model, Cmd.none )
@@ -622,7 +608,6 @@ subscriptions _ =
         , receiveSelectedDestinationDirectory BackendReturnedDestinationDirectoryPath
         , receiveSelectedSourceDirectory BackendReturnedSourceDirectoryPath
         , receiveSubDirectories (decodeFileInfoList BackendReturnedDestinationDirectories)
-        , Sub.map UserPressedKey Keyboard.subscriptions
         ]
 
 
@@ -670,7 +655,7 @@ view model =
 
 viewHeader : Model -> Html Msg
 viewHeader model =
-    header []
+    header [ tabindex 0 ]
         [ div
             [ class "input-box"
             ]
@@ -691,13 +676,23 @@ viewHeader model =
 
 viewLeftSide : Model -> Html Msg
 viewLeftSide model =
-    div [ id "container-left" ] <|
+    div
+        [ id "container-left"
+        , tabindex 1
+        , on "keydown" (Json.Decode.map (UserPressedKey Source) decodeKeyboardEvent)
+        ]
+    <|
         viewSource model
 
 
 viewRightSide : Model -> Html Msg
 viewRightSide model =
-    div [ id "container-right" ] <|
+    div
+        [ id "container-right"
+        , tabindex 2
+        , on "keydown" (Json.Decode.map (UserPressedKey Destination) decodeKeyboardEvent)
+        ]
+    <|
         viewDestination model
 
 
