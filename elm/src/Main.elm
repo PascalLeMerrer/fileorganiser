@@ -298,6 +298,52 @@ update msg model =
                 ]
             )
 
+        BackendReturnedRenamedFile fileInfo ->
+            case model.editedFile of
+                Just editedFile ->
+                    let
+                        newFileInfo =
+                            { fileInfo | isSelected = True }
+
+                        originalPath =
+                            model.sourceDirectoryPath
+                                ++ model.pathSeparator
+                                ++ editedFile.name
+                                |> Debug.log "originalPath"
+
+                        newPath =
+                            model.sourceDirectoryPath
+                                ++ model.pathSeparator
+                                ++ newFileInfo.name
+                                |> Debug.log "newPath"
+
+                        command : Command
+                        command =
+                            { operation = Rename
+                            , files = [ newFileInfo ]
+                            , destination = Just newPath
+                            , source = Just originalPath
+                            }
+
+                        updatedSourceFiles =
+                            List.Extra.updateIf (\f -> f == editedFile) (\_ -> newFileInfo) model.sourceDirectoryFiles
+                                |> Debug.log "updatedSourceFiles"
+                    in
+                    ( { model
+                        | editedName = ""
+                        , editedFile = Nothing
+                        , history = command :: model.history
+                        , sourceDirectoryFiles = updatedSourceFiles
+                      }
+                        |> filterSourceFiles
+                    , Cmd.none
+                    )
+
+                Nothing ->
+                    ( { model | error = Just ("File was unexpectedLy renamed to " ++ fileInfo.name) }
+                    , Cmd.none
+                    )
+
         BackendReturnedSourceDirectoryPath path ->
             if path == "" then
                 -- user canceled the selection
@@ -367,28 +413,6 @@ update msg model =
 
         UserValidatedFilename ->
             applyRenamming model
-
-        BackendReturnedRenamedFile fileInfo ->
-            case Debug.log "model.editedFile" model.editedFile of
-                Just editedFile ->
-                    -- TODO create command
-                    let
-                        newFileInfo =
-                            { fileInfo | isSelected = True }
-
-                        updatedSourceFiles =
-                            List.Extra.updateIf (\f -> f == editedFile) (\_ -> newFileInfo) model.sourceDirectoryFiles
-                                |> Debug.log "updatedSourceFiles"
-                    in
-                    ( { model | editedName = "", editedFile = Nothing, sourceDirectoryFiles = updatedSourceFiles }
-                        |> filterSourceFiles
-                    , Cmd.none
-                    )
-
-                Nothing ->
-                    ( { model | error = Just ("File was unexpectedLy renamed to " ++ fileInfo.name) }
-                    , Cmd.none
-                    )
 
 
 filterSourceFiles : Model -> Model
@@ -494,25 +518,58 @@ cancel model =
     in
     case commandToCancel of
         Just command ->
-            let
-                source =
-                    command.destination
-                        |> Maybe.withDefault ""
+            case command.operation of
+                Move ->
+                    cancelMove command model
 
-                filesToMove =
-                    command.files
-                        |> List.map (\f -> source ++ model.pathSeparator ++ f.name)
+                Rename ->
+                    cancelRenaming command model
 
-                destination =
-                    command.source
-                        |> Maybe.withDefault ""
-            in
-            ( model
-            , moveFiles ( filesToMove, destination )
-            )
+                Delete ->
+                    Debug.todo "Implement delete cancellation"
 
         Nothing ->
             ( model, Cmd.none )
+
+
+cancelMove : Command -> Model -> ( Model, Cmd Msg )
+cancelMove command model =
+    let
+        source =
+            command.destination
+                |> Maybe.withDefault ""
+
+        filesToMove =
+            command.files
+                |> List.map (\f -> source ++ model.pathSeparator ++ f.name)
+
+        destination =
+            command.source
+                |> Maybe.withDefault ""
+    in
+    ( model
+    , moveFiles ( filesToMove, destination )
+    )
+
+
+cancelRenaming : Command -> Model -> ( Model, Cmd Msg )
+cancelRenaming command model =
+    let
+        oldName =
+            command.destination |> Maybe.withDefault ""
+
+        newName =
+            command.source |> Maybe.withDefault ""
+
+        encodedValue =
+            Json.Encode.object
+                [ ( "oldName", Json.Encode.string oldName )
+                , ( "newName", Json.Encode.string newName )
+                ]
+    in
+    ( { model | editedFile = List.head command.files }
+    , renameFile encodedValue
+    )
 
 
 processKeyboardShortcut : Model -> Keyboard.Msg -> ( Model, Cmd Msg )
