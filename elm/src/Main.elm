@@ -1,9 +1,9 @@
 port module Main exposing (..)
 
 import Browser
-import Html exposing (Html, button, div, footer, h2, header, input, text)
-import Html.Attributes exposing (autocomplete, class, id, placeholder, type_, value)
-import Html.Events exposing (onClick, onInput)
+import Html exposing (Html, button, div, footer, form, h2, header, input, text)
+import Html.Attributes exposing (autocomplete, autofocus, class, id, placeholder, type_, value)
+import Html.Events exposing (onClick, onInput, onSubmit)
 import Iso8601
 import Json.Decode exposing (Decoder, list)
 import Json.Decode.Pipeline exposing (hardcoded, required)
@@ -76,7 +76,7 @@ main =
 
 
 
--- PORTS
+-- OUTPUT PORTS
 
 
 port getCurrentDirectoryPath : () -> Cmd msg
@@ -92,6 +92,22 @@ port getSubdirectories : String -> Cmd msg
 
 
 port moveFiles : ( List String, String ) -> Cmd msg
+
+
+port renameFile : Json.Encode.Value -> Cmd msg
+
+
+port selectDestinationDirectory : String -> Cmd msg
+
+
+port selectSourceDirectory : String -> Cmd msg
+
+
+
+-- INPUT PORTS
+
+
+port fileRenamed : (Json.Encode.Value -> msg) -> Sub msg
 
 
 port receiveCurrentDirectoryPath : (String -> msg) -> Sub msg
@@ -118,12 +134,6 @@ port receiveSourceDirectoryContent : (Json.Encode.Value -> msg) -> Sub msg
 port receiveSubDirectories : (Json.Encode.Value -> msg) -> Sub msg
 
 
-port selectDestinationDirectory : String -> Cmd msg
-
-
-port selectSourceDirectory : String -> Cmd msg
-
-
 
 -- MODEL
 
@@ -132,6 +142,8 @@ type alias Model =
     { destinationDirectoryFiles : List FileInfo
     , destinationDirectoryPath : String
     , destinationSubdirectories : List FileInfo
+    , editedFile : Maybe FileInfo
+    , editedName : String
     , error : Maybe String
     , filter : String
     , filteredDestinationSubdirectories : List FileInfo
@@ -151,6 +163,8 @@ init _ =
     ( { destinationDirectoryFiles = []
       , destinationDirectoryPath = ""
       , destinationSubdirectories = []
+      , editedFile = Nothing
+      , editedName = ""
       , error = Nothing
       , filter = ""
       , filteredDestinationSubdirectories = []
@@ -182,9 +196,9 @@ type Msg
     | BackendReturnedDestinationDirectoryPath String
     | BackendReturnedError String
     | BackendReturnedMovedFiles (List FileInfo)
+    | BackendReturnedRenamedFile FileInfo
     | BackendReturnedSourceDirectoryContent (List FileInfo)
     | BackendReturnedSourceDirectoryPath String
-    | UserPressedKey Keyboard.Msg
     | NoOp
     | UserChangedFilter String
     | UserClickedClearFilter
@@ -192,6 +206,9 @@ type Msg
     | UserClickedSourceFile FileInfo
     | UserClickedDestinationFile FileInfo
     | UserClickedSourceDirectoryButton
+    | UserModifiedFileName String
+    | UserPressedKey Keyboard.Msg
+    | UserValidatedFilename
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -292,21 +309,9 @@ update msg model =
                 )
 
         UserPressedKey keyMsg ->
-            let
-                ( pressedKeys, maybeKeyChange ) =
-                    Keyboard.updateWithKeyChange Keyboard.anyKeyOriginal keyMsg model.pressedKeys
-
-                modelWithPressedKeys =
-                    { model
-                        | pressedKeys = Debug.log "pressedKeys" pressedKeys
-                    }
-            in
-            case Debug.log "maybeKeyChange" maybeKeyChange of
-                Just (KeyDown (Character "m")) ->
-                    moveSelectedSourceFiles modelWithPressedKeys
-
-                Just (KeyDown (Character "u")) ->
-                    cancelMove modelWithPressedKeys
+            case model.editedFile of
+                Nothing ->
+                    processKeyboardShortcut model keyMsg
 
                 _ ->
                     ( model, Cmd.none )
@@ -356,6 +361,34 @@ update msg model =
             ( { model | destinationDirectoryFiles = updatedDestinationFiles }
             , Cmd.none
             )
+
+        UserModifiedFileName newName ->
+            ( { model | editedName = newName }, Cmd.none )
+
+        UserValidatedFilename ->
+            applyRenamming model
+
+        BackendReturnedRenamedFile fileInfo ->
+            case Debug.log "model.editedFile" model.editedFile of
+                Just editedFile ->
+                    -- TODO create command
+                    let
+                        newFileInfo =
+                            { fileInfo | isSelected = True }
+
+                        updatedSourceFiles =
+                            List.Extra.updateIf (\f -> f == editedFile) (\_ -> newFileInfo) model.sourceDirectoryFiles
+                                |> Debug.log "updatedSourceFiles"
+                    in
+                    ( { model | editedName = "", editedFile = Nothing, sourceDirectoryFiles = updatedSourceFiles }
+                        |> filterSourceFiles
+                    , Cmd.none
+                    )
+
+                Nothing ->
+                    ( { model | error = Just ("File was unexpectedLy renamed to " ++ fileInfo.name) }
+                    , Cmd.none
+                    )
 
 
 filterSourceFiles : Model -> Model
@@ -415,8 +448,45 @@ moveSelectedSourceFiles model =
     )
 
 
-cancelMove : Model -> ( Model, Cmd Msg )
-cancelMove model =
+renameSelectedFile : Model -> ( Model, Cmd Msg )
+renameSelectedFile model =
+    let
+        fileToEdit =
+            model.filteredSourceDirectoryFiles
+                |> List.Extra.find .isSelected
+    in
+    case fileToEdit of
+        Just fileInfo ->
+            ( { model | editedFile = Just fileInfo, editedName = fileInfo.name }
+            , Cmd.none
+            )
+
+        Nothing ->
+            ( model, Cmd.none )
+
+
+applyRenamming : Model -> ( Model, Cmd Msg )
+applyRenamming model =
+    let
+        oldName =
+            model.editedFile
+                |> Maybe.map (\f -> model.sourceDirectoryPath ++ model.pathSeparator ++ f.name)
+                |> Maybe.withDefault ""
+
+        newName =
+            model.sourceDirectoryPath ++ model.pathSeparator ++ model.editedName
+
+        encodedValue =
+            Json.Encode.object
+                [ ( "oldName", Json.Encode.string oldName )
+                , ( "newName", Json.Encode.string newName )
+                ]
+    in
+    ( model, renameFile encodedValue )
+
+
+cancel : Model -> ( Model, Cmd Msg )
+cancel model =
     let
         commandToCancel =
             model.history
@@ -445,6 +515,40 @@ cancelMove model =
             ( model, Cmd.none )
 
 
+processKeyboardShortcut : Model -> Keyboard.Msg -> ( Model, Cmd Msg )
+processKeyboardShortcut model keyMsg =
+    let
+        ( pressedKeys, maybeKeyChange ) =
+            Keyboard.updateWithKeyChange Keyboard.anyKeyOriginal keyMsg model.pressedKeys
+
+        modelWithPressedKeys =
+            { model
+                | pressedKeys = Debug.log "pressedKeys" pressedKeys
+            }
+    in
+    case Debug.log "maybeKeyChange" maybeKeyChange of
+        Just (KeyDown (Character "m")) ->
+            moveSelectedSourceFiles modelWithPressedKeys
+
+        Just (KeyUp (Character "m")) ->
+            moveSelectedSourceFiles modelWithPressedKeys
+
+        Just (KeyDown (Character "r")) ->
+            renameSelectedFile modelWithPressedKeys
+
+        Just (KeyUp (Character "r")) ->
+            renameSelectedFile modelWithPressedKeys
+
+        Just (KeyDown (Character "u")) ->
+            cancel modelWithPressedKeys
+
+        Just (KeyUp (Character "u")) ->
+            cancel modelWithPressedKeys
+
+        _ ->
+            ( model, Cmd.none )
+
+
 
 -- SUBSCRIPTIONS
 
@@ -452,7 +556,8 @@ cancelMove model =
 subscriptions : Model -> Sub Msg
 subscriptions _ =
     Sub.batch
-        [ receiveCurrentDirectoryPath BackendReturnedCurrentDirPath
+        [ fileRenamed (decodeFileInfo BackendReturnedRenamedFile)
+        , receiveCurrentDirectoryPath BackendReturnedCurrentDirPath
         , receiveSourceDirectoryContent (decodeFileInfoList BackendReturnedSourceDirectoryContent)
         , receiveDestinationDirectoryFiles (decodeFileInfoList BackendReturnedDestinationFiles)
         , receiveError BackendReturnedError
@@ -475,8 +580,21 @@ decodeFileInfoList msg value =
             msg fileInfoList
 
         Err error ->
-            -- TODO process error
-            NoOp
+            BackendReturnedError (Json.Decode.errorToString error)
+
+
+decodeFileInfo : (FileInfo -> Msg) -> Json.Encode.Value -> Msg
+decodeFileInfo msg value =
+    let
+        decodedValue =
+            Json.Decode.decodeValue fileInfoDecoder value
+    in
+    case decodedValue of
+        Ok fileInfo ->
+            msg fileInfo
+
+        Err error ->
+            BackendReturnedError (Json.Decode.errorToString error)
 
 
 
@@ -621,6 +739,24 @@ viewDestinationFiles model =
 
 viewFileInfo : Model -> (FileInfo -> Msg) -> FileInfo -> Html Msg
 viewFileInfo model onClickMsg fileInfo =
+    let
+        isEdited =
+            case model.editedFile of
+                Just someFileInfo ->
+                    fileInfo == someFileInfo
+
+                Nothing ->
+                    False
+    in
+    if isEdited then
+        viewEditedFilename model
+
+    else
+        viewReadOnlyFile model onClickMsg fileInfo
+
+
+viewReadOnlyFile : Model -> (FileInfo -> Msg) -> FileInfo -> Html Msg
+viewReadOnlyFile model onClickMsg fileInfo =
     if fileInfo.isDir then
         div
             [ class "fileinfo"
@@ -645,6 +781,19 @@ viewFileInfo model onClickMsg fileInfo =
             , div [] [ text <| String.fromInt fileInfo.size ]
             , div [ class "filemodificationdate" ] [ viewDate model fileInfo.modTime ]
             ]
+
+
+viewEditedFilename : Model -> Html Msg
+viewEditedFilename model =
+    form [ onSubmit UserValidatedFilename ]
+        [ input
+            [ class "fileinfo-input"
+            , onInput UserModifiedFileName
+            , autofocus True
+            , value model.editedName
+            ]
+            []
+        ]
 
 
 viewDate : Model -> Time.Posix -> Html Msg

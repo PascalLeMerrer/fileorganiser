@@ -193,3 +193,22 @@ func (a *App) Move(sourceFiles []string, destinationDirectory string) ([]FileInf
 	}
 	return result, nil
 }
+
+func (a *App) Rename(oldName string, newName string) (FileInfo, error) {
+	err := os.Rename(oldName, newName)
+	if err != nil {
+		return FileInfo{}, err
+	}
+	info, err := os.Stat(newName)
+	if err != nil {
+		return FileInfo{}, err
+	}
+	result := FileInfo{
+        Name:    info.Name(),
+        Size:    info.Size(),
+        Mode:    info.Mode(),
+        ModTime: info.ModTime(),
+        IsDir:   info.IsDir(),
+    }
+	return result, nil
+}

@@ -109,6 +109,19 @@
         });
       });
 
+      // Rename a file
+      app.ports.renameFile.subscribe(function (params) {
+        window.go.main.App.Rename(params.oldName, params.newName)
+        .then((result) =>
+          {
+            app.ports.fileRenamed.send(result);
+          }
+        ).catch(msg => {
+          console.error(msg);
+          app.ports.receiveError.send(msg);
+        });
+      });
+
   </script>
 </body>
 
