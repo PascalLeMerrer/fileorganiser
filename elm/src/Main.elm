@@ -1,6 +1,7 @@
 port module Main exposing (..)
 
 import Browser
+import Filesize
 import Html exposing (Html, button, div, footer, form, h2, header, input, text)
 import Html.Attributes exposing (autocomplete, autofocus, class, id, placeholder, tabindex, type_, value)
 import Html.Events exposing (on, onClick, onInput, onSubmit)
@@ -839,7 +840,7 @@ viewReadOnlyFile model onClickMsg fileInfo =
             , onClick (onClickMsg fileInfo)
             ]
             [ div [ class className ] [ text fileInfo.name ]
-            , div [] [ text <| String.fromInt fileInfo.size ]
+            , div [] [ text <| Filesize.format fileInfo.size ]
             , div [ class "filemodificationdate" ] [ viewDate model fileInfo.modTime ]
             ]
 
