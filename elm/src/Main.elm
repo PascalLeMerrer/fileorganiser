@@ -217,7 +217,7 @@ type Target
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
-    case msg of
+    case Debug.log "msg" msg of
         AdjustTimeZone newZone ->
             ( { model | timezone = newZone }
             , Cmd.none
@@ -578,14 +578,23 @@ cancelRenaming command model =
 
 processKeyboardShortcut : Model -> Target -> KeyboardEvent -> ( Model, Cmd Msg )
 processKeyboardShortcut model target event =
-    case ( Debug.log "KeyCode" event.keyCode, event.ctrlKey ) of
-        ( Key.M, False ) ->
+    case ( event.keyCode, event.ctrlKey, event.metaKey ) of
+        ( Key.M, False, False ) ->
             moveSelectedSourceFiles model
 
-        ( Key.R, False ) ->
+        ( Key.R, False, False ) ->
             renameSelectedFile model
 
-        ( Key.U, False ) ->
+        ( Key.F2, False, False ) ->
+            renameSelectedFile model
+
+        ( Key.U, False, False ) ->
+            cancel model
+
+        ( Key.Z, True, False ) ->
+            cancel model
+
+        ( Key.Z, False, True ) ->
             cancel model
 
         _ ->
