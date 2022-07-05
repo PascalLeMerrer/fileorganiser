@@ -145,10 +145,14 @@ func (a *App) GetSubdirectoriesRecursively(dirName string) ([]FileInfo, error) {
 		    if err != nil {
 		        return err
 		    }
-		    isHidden, _ := isHidden(info.Name(), dirName)
+		    relativePath, err := filepath.Rel(dirName, path)
+			if err != nil {
+		        return err
+		    }
+		    isHidden, _ := isHidden(relativePath, dirName)
 	    	if info.IsDir() && ! isHidden {
 		        f := FileInfo{
-		            Name:    info.Name(),
+		            Name:    relativePath,
 		            Size:    info.Size(),
 		            Mode:    info.Mode(),
 		            ModTime: info.ModTime(),
