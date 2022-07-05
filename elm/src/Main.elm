@@ -90,7 +90,7 @@ port getDestinationDirectoryFiles : String -> Cmd msg
 port getSourceDirectoryContent : String -> Cmd msg
 
 
-port getSubdirectories : String -> Cmd msg
+port getDestinationSubdirectories : String -> Cmd msg
 
 
 port moveFiles : ( List String, String ) -> Cmd msg
@@ -192,8 +192,8 @@ type Msg
     = AdjustTimeZone Time.Zone
     | BackendReturnedCurrentDirPath String
     | BackendReturnedDestinationDirectories (List FileInfo)
-    | BackendReturnedDestinationFiles (List FileInfo)
     | BackendReturnedDestinationDirectoryPath String
+    | BackendReturnedDestinationFiles (List FileInfo)
     | BackendReturnedError String
     | BackendReturnedMovedFiles (List FileInfo)
     | BackendReturnedRenamedFile FileInfo
@@ -202,10 +202,12 @@ type Msg
     | NoOp
     | UserChangedFilter String
     | UserClickedClearFilter
+    | UserClickedDestinationDirectory FileInfo
     | UserClickedDestinationDirectoryButton
-    | UserClickedSourceFile FileInfo
     | UserClickedDestinationFile FileInfo
+    | UserClickedSourceDirectory FileInfo
     | UserClickedSourceDirectoryButton
+    | UserClickedSourceFile FileInfo
     | UserModifiedFileName String
     | UserPressedKey Target KeyboardEvent
     | UserValidatedFilename
@@ -235,11 +237,12 @@ update msg model =
             in
             ( { model
                 | sourceDirectoryPath = path
+                , destinationDirectoryPath = path
                 , pathSeparator = pathSeparator
               }
             , Cmd.batch
                 [ getSourceDirectoryContent path
-                , getSubdirectories path
+                , getDestinationSubdirectories path
                 , getDestinationDirectoryFiles path
                 ]
             )
@@ -281,7 +284,7 @@ update msg model =
             else
                 ( { model | destinationDirectoryPath = path }
                 , Cmd.batch
-                    [ getSubdirectories path
+                    [ getDestinationSubdirectories path
                     , getDestinationDirectoryFiles path
                     ]
                 )
@@ -314,13 +317,11 @@ update msg model =
                             model.sourceDirectoryPath
                                 ++ model.pathSeparator
                                 ++ editedFile.name
-                                |> Debug.log "originalPath"
 
                         newPath =
                             model.sourceDirectoryPath
                                 ++ model.pathSeparator
                                 ++ newFileInfo.name
-                                |> Debug.log "newPath"
 
                         command : Command
                         command =
@@ -332,7 +333,6 @@ update msg model =
 
                         updatedSourceFiles =
                             List.Extra.updateIf (\f -> f == editedFile) (\_ -> newFileInfo) model.sourceDirectoryFiles
-                                |> Debug.log "updatedSourceFiles"
                     in
                     ( { model
                         | editedName = ""
@@ -418,6 +418,27 @@ update msg model =
 
         UserValidatedFilename ->
             applyRenamming model
+
+        UserClickedDestinationDirectory fileInfo ->
+            let
+                newDestinationPath =
+                    model.destinationDirectoryPath ++ model.pathSeparator ++ fileInfo.name
+            in
+            ( { model | destinationDirectoryPath = newDestinationPath }
+            , Cmd.batch
+                [ getDestinationDirectoryFiles newDestinationPath
+                , getDestinationSubdirectories newDestinationPath
+                ]
+            )
+
+        UserClickedSourceDirectory fileInfo ->
+            let
+                newSourcePath =
+                    model.sourceDirectoryPath ++ model.pathSeparator ++ fileInfo.name
+            in
+            ( { model | sourceDirectoryPath = newSourcePath }
+            , getSourceDirectoryContent newSourcePath
+            )
 
 
 filterSourceFiles : Model -> Model
@@ -806,8 +827,7 @@ viewSourceSubdirectories model =
             [ class "panel-content" ]
             (model.sourceSubDirectories
                 |> List.sortBy (.name >> String.toLower)
-                |> List.map (viewFileInfo model UserClickedSourceFile)
-             -- FIXME
+                |> List.map (viewDirectory model UserClickedSourceDirectory)
             )
         ]
 
@@ -827,10 +847,18 @@ viewDestinationSubdirectories model =
             [ class "panel-content" ]
             (model.filteredDestinationSubdirectories
                 |> List.sortBy (.name >> String.toLower)
-                |> List.map (viewFileInfo model UserClickedSourceFile)
-             -- FIXME
+                |> List.map (viewDirectory model UserClickedDestinationDirectory)
             )
         ]
+
+
+viewDirectory : Model -> (FileInfo -> Msg) -> FileInfo -> Html Msg
+viewDirectory model onClickMsg fileInfo =
+    div
+        [ class "fileinfo"
+        , onClick (onClickMsg fileInfo)
+        ]
+        [ text <| fileInfo.name ]
 
 
 viewSourceFiles : Model -> Html Msg
@@ -884,30 +912,22 @@ viewFileInfo model onClickMsg fileInfo =
 
 viewReadOnlyFile : Model -> (FileInfo -> Msg) -> FileInfo -> Html Msg
 viewReadOnlyFile model onClickMsg fileInfo =
-    if fileInfo.isDir then
-        div
-            [ class "fileinfo"
-            , onClick (onClickMsg fileInfo)
-            ]
-            [ text <| fileInfo.name ]
+    let
+        className =
+            if fileInfo.isSelected then
+                "filename selected"
 
-    else
-        let
-            className =
-                if fileInfo.isSelected then
-                    "filename selected"
-
-                else
-                    "filename"
-        in
-        div
-            [ class "fileinfo"
-            , onClick (onClickMsg fileInfo)
-            ]
-            [ div [ class className ] [ text fileInfo.name ]
-            , div [] [ text <| Filesize.format fileInfo.size ]
-            , div [ class "filemodificationdate" ] [ viewDate model fileInfo.modTime ]
-            ]
+            else
+                "filename"
+    in
+    div
+        [ class "fileinfo"
+        , onClick (onClickMsg fileInfo)
+        ]
+        [ div [ class className ] [ text fileInfo.name ]
+        , div [] [ text <| Filesize.format fileInfo.size ]
+        , div [ class "filemodificationdate" ] [ viewDate model fileInfo.modTime ]
+        ]
 
 
 viewEditedFilename : Model -> Html Msg

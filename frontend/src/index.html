@@ -56,7 +56,7 @@
       });
 
       // Get subdirectories of selected destination directory
-      app.ports.getSubdirectories.subscribe(function (directoryName) {
+      app.ports.getDestinationSubdirectories.subscribe(function (directoryName) {
         window.go.main.App.GetSubdirectoriesRecursively(directoryName)
         .then((result) =>
           {
