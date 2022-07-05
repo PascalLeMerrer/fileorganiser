@@ -1,6 +1,6 @@
 elm-stuff
 /.vscode
-build
+build/bin
 frontend/src/elm.js
 frontend/wailsjs/go/main/*
 tmp*
