@@ -86,6 +86,7 @@ h2 {
   flex-direction: row;
   flex-wrap: nowrap;
   align-items: flex-end;
+  word-break: break-all;
 }
 
 .filename.selected {
@@ -100,7 +101,7 @@ h2 {
   align-self: flex-start;
   flex:  1;
   margin-right: 10px;
-  overflow-x: hidden;
+  word-break: break-all;
 }
 
 .filemodificationdate {
