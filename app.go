@@ -81,7 +81,12 @@ func (a *App) GetDirectoryContent(dirName string) ([]FileInfo, error) {
 		return nil, err
 	}
 
-    result := []FileInfo{}
+	parentDirFileInfo, err := getParentDirectory(dirName)
+	if err != nil {
+		return nil, err
+	}
+	result := []FileInfo{}
+	result = append(result, parentDirFileInfo)
 
     for _, entry := range fileList {
     	isHidden, _ := isHidden(entry.Name(), dirName)
@@ -117,12 +122,7 @@ func (a *App) GetDirectoryFiles(dirName string) ([]FileInfo, error) {
 		return nil, err
 	}
 
-	parentDirFileInfo, err := getParentDirectory(dirName)
-	if err != nil {
-		return nil, err
-	}
 	result := []FileInfo{}
-	result = append(result, parentDirFileInfo)
 
     for _, entry := range fileList {
     	isHidden, _ := isHidden(entry.Name(), dirName)
@@ -145,20 +145,19 @@ func (a *App) GetDirectoryFiles(dirName string) ([]FileInfo, error) {
 
 func (a *App) GetSubdirectoriesRecursively(dirName string) ([]FileInfo, error) {
 	parentDirFileInfo, err := getParentDirectory(dirName)
-	if err != nil {
-		return nil, err
-	}
 	result := []FileInfo{}
-	result = append(result, parentDirFileInfo)
+	if err == nil {
+		result = append(result, parentDirFileInfo)
+	}
 
 	err = filepath.Walk(dirName,
 	    func(path string, info os.FileInfo, err error) error {
 		    if err != nil {
-		        return err
+		        return nil // ignore the file
 		    }
 		    relativePath, err := filepath.Rel(dirName, path)
 			if err != nil {
-		        return err
+		        return nil // ignore the file
 		    }
 		    isHidden, _ := isHidden(relativePath, dirName)
 	    	if info.IsDir() && ! isHidden {

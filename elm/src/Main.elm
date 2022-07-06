@@ -28,6 +28,10 @@ unixPathSep =
     "/"
 
 
+
+{- Maps Golang FileInfo -}
+
+
 type alias FileInfo =
     { isDir : Bool
     , mode : Int
@@ -422,7 +426,12 @@ update msg model =
         UserClickedDestinationDirectory fileInfo ->
             let
                 newDestinationPath =
-                    model.destinationDirectoryPath ++ model.pathSeparator ++ fileInfo.name
+                    case fileInfo.name of
+                        ".." ->
+                            parentDir model model.destinationDirectoryPath
+
+                        _ ->
+                            model.destinationDirectoryPath ++ model.pathSeparator ++ fileInfo.name
             in
             ( { model | destinationDirectoryPath = newDestinationPath }
             , Cmd.batch
@@ -434,11 +443,27 @@ update msg model =
         UserClickedSourceDirectory fileInfo ->
             let
                 newSourcePath =
-                    model.sourceDirectoryPath ++ model.pathSeparator ++ fileInfo.name
+                    case fileInfo.name of
+                        ".." ->
+                            parentDir model model.sourceDirectoryPath
+
+                        _ ->
+                            model.sourceDirectoryPath ++ model.pathSeparator ++ fileInfo.name
             in
             ( { model | sourceDirectoryPath = newSourcePath }
             , getSourceDirectoryContent newSourcePath
             )
+
+
+parentDir : Model -> String -> String
+parentDir model path =
+    let
+        index =
+            String.indexes model.pathSeparator path
+                |> List.Extra.last
+                |> Maybe.withDefault (String.length path)
+    in
+    String.slice 0 index path
 
 
 filterSourceFiles : Model -> Model
@@ -834,9 +859,15 @@ viewSourceSubdirectories model =
 
 viewDestinationSubdirectories : Model -> Html Msg
 viewDestinationSubdirectories model =
+    let
+        currentDirName =
+            String.split model.pathSeparator model.destinationDirectoryPath
+                |> List.Extra.last
+                |> Maybe.withDefault "Error: cannot get current dir name"
+    in
     div [ class "panel" ]
         [ div [ class "panel-header" ]
-            [ h2 [] [ text <| "Destination subdirectories " ]
+            [ h2 [] [ text <| "Destination directory: " ++ currentDirName ]
             , button
                 [ class "btn"
                 , onClick UserClickedDestinationDirectoryButton
