@@ -122,6 +122,18 @@
         });
       });
 
+      // Delete a file
+      app.ports.removeFile.subscribe(function (filePath) {
+        window.go.main.App.Remove(filePath)
+        .then((result) =>
+          {
+            app.ports.fileRemoved.send(result);
+          }
+        ).catch(msg => {
+          app.ports.receiveError.send(msg);
+        });
+      });
+
   </script>
 </body>
 

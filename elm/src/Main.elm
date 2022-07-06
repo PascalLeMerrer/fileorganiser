@@ -100,6 +100,9 @@ port getDestinationSubdirectories : String -> Cmd msg
 port moveFiles : ( List String, String ) -> Cmd msg
 
 
+port removeFile : Json.Encode.Value -> Cmd msg
+
+
 port renameFile : Json.Encode.Value -> Cmd msg
 
 
@@ -114,6 +117,9 @@ port selectSourceDirectory : String -> Cmd msg
 
 
 port fileRenamed : (Json.Encode.Value -> msg) -> Sub msg
+
+
+port fileRemoved : (Json.Encode.Value -> msg) -> Sub msg
 
 
 port receiveCurrentDirectoryPath : (String -> msg) -> Sub msg
@@ -200,6 +206,7 @@ type Msg
     | BackendReturnedDestinationFiles (List FileInfo)
     | BackendReturnedError String
     | BackendReturnedMovedFiles (List FileInfo)
+    | BackendReturnedRemovedFile FileInfo
     | BackendReturnedRenamedFile FileInfo
     | BackendReturnedSourceDirectoryContent (List FileInfo)
     | BackendReturnedSourceDirectoryPath String
@@ -309,6 +316,9 @@ update msg model =
                 , getDestinationDirectoryFiles model.destinationDirectoryPath
                 ]
             )
+
+        BackendReturnedRemovedFile fileInfo ->
+            ( model, getSourceDirectoryContent model.sourceDirectoryPath )
 
         BackendReturnedRenamedFile fileInfo ->
             case model.editedFile of
@@ -540,6 +550,24 @@ renameSelectedFile model =
             ( model, Cmd.none )
 
 
+removeSelectedFile : Model -> ( Model, Cmd Msg )
+removeSelectedFile model =
+    let
+        fileToRemove =
+            model.filteredSourceDirectoryFiles
+                |> List.Extra.find .isSelected
+                |> Debug.log "fileToRemove"
+    in
+    case fileToRemove of
+        Just fileInfo ->
+            ( model
+            , removeFile <| Json.Encode.string <| Debug.log "filepath" <| model.sourceDirectoryPath ++ model.pathSeparator ++ fileInfo.name
+            )
+
+        Nothing ->
+            ( model, Cmd.none )
+
+
 applyRenamming : Model -> ( Model, Cmd Msg )
 applyRenamming model =
     let
@@ -665,11 +693,17 @@ processKeyboardShortcut model target event =
         ( Key.A, False, True ) ->
             selectAllFiles model target
 
+        ( Key.Backspace, False, True ) ->
+            removeSelectedFile model
+
         ( Key.M, False, False ) ->
             moveSelectedSourceFiles model
 
         ( Key.R, False, False ) ->
             renameSelectedFile model
+
+        ( Key.Delete, False, False ) ->
+            removeSelectedFile model
 
         ( Key.U, False, False ) ->
             cancel model
@@ -691,7 +725,8 @@ processKeyboardShortcut model target event =
 subscriptions : Model -> Sub Msg
 subscriptions _ =
     Sub.batch
-        [ fileRenamed (decodeFileInfo BackendReturnedRenamedFile)
+        [ fileRemoved (decodeFileInfo BackendReturnedRemovedFile)
+        , fileRenamed (decodeFileInfo BackendReturnedRenamedFile)
         , receiveCurrentDirectoryPath BackendReturnedCurrentDirPath
         , receiveSourceDirectoryContent (decodeFileInfoList BackendReturnedSourceDirectoryContent)
         , receiveDestinationDirectoryFiles (decodeFileInfoList BackendReturnedDestinationFiles)

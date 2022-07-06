@@ -244,3 +244,19 @@ func (a *App) Rename(oldName string, newName string) (FileInfo, error) {
     }
 	return result, nil
 }
+
+func (a *App) Remove(filePath string) (FileInfo, error) {
+	info, err := os.Stat(filePath)
+	if err != nil {
+		return FileInfo{}, err
+	}
+	fileInfo := FileInfo{
+        Name:    info.Name(),
+        Size:    info.Size(),
+        Mode:    info.Mode(),
+        ModTime: info.ModTime(),
+        IsDir:   info.IsDir(),
+    }
+    err = os.Remove(filePath)
+	return fileInfo, err
+}
