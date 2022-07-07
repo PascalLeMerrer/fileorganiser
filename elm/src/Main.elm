@@ -1145,17 +1145,17 @@ viewFocusedZone model =
         "focused zone"
             ++ (case model.focusedZone of
                     Confirmation ->
-                        "Confirmation "
+                        "Confirmation | "
 
                     Filtering ->
-                        "Filtering "
+                        "Filtering | "
 
                     LeftSide ->
-                        "LeftSide "
+                        "LeftSide | "
 
                     NameEditor ->
-                        "NameEditor "
+                        "NameEditor | "
 
                     RightSide ->
-                        "RightSide "
+                        "RightSide | "
                )
