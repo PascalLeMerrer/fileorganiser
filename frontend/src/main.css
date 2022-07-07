@@ -3,7 +3,7 @@
 }
 
 html {
-  background-color: rgba(27, 38, 54, 1);
+  background-color: lightgrey;
 }
 
 body {
@@ -54,8 +54,16 @@ h2 {
 }
 
 .btn:hover {
-  background-image: linear-gradient(to top, #cfd9df 0%, #e2ebf0 100%);
   color: #333333;
+}
+
+#deleteButton {
+  background-color: red;
+  color: white;
+  font-weight: bold;
+}
+#deleteButton:hover {
+
 }
 
 .input-box .input {
@@ -113,7 +121,7 @@ h2 {
 #app {
   height: 100vh;
   display: grid;
-  grid-template-rows: 80px 1fr 30px;
+  grid-template-rows: 80px 1fr 50px;
   grid-template-columns: 1fr 1fr;
 }
 
@@ -164,6 +172,11 @@ footer {
   background: lightgrey;
   color:  black;
   padding: 10px;
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+  margin:  0 5px 5px 5px;
 }
 
 .panel {
@@ -201,4 +214,9 @@ footer {
   border-radius: 4px;
   background-color: rgba(0, 0, 0, .5);
   box-shadow: 0 0 1px rgba(255, 255, 255, .5);
+}
+
+.danger {
+  border: 1px solid red;
+  background-color: #FFAAAA;
 }

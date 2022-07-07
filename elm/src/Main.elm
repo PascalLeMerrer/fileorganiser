@@ -2,9 +2,9 @@ port module Main exposing (..)
 
 import Browser
 import Filesize
-import Html exposing (Html, button, div, footer, form, h2, header, input, text)
+import Html exposing (Html, button, div, footer, form, h2, header, input, span, text)
 import Html.Attributes exposing (autocomplete, autofocus, class, id, placeholder, tabindex, type_, value)
-import Html.Events as Events exposing (onClick, onInput, onSubmit)
+import Html.Events as Events exposing (onClick, onFocus, onInput, onSubmit)
 import Iso8601
 import Json.Decode exposing (Decoder, list)
 import Json.Decode.Pipeline exposing (hardcoded, required)
@@ -46,6 +46,14 @@ type Operation
     = Move
     | Rename
     | Delete
+
+
+type FocusedZone
+    = Confirmation
+    | Filtering
+    | LeftSide
+    | NameEditor
+    | RightSide
 
 
 type alias Command =
@@ -157,11 +165,13 @@ type alias Model =
     , editedFile : Maybe FileInfo
     , editedName : String
     , error : Maybe String
+    , filesToDelete : List FileInfo
     , filter : String
     , filteredDestinationSubdirectories : List FileInfo
     , filteredSourceDirectoryFiles : List FileInfo
     , history : List Command
     , pathSeparator : String
+    , focusedZone : FocusedZone
     , sourceDirectoryFiles : List FileInfo
     , sourceDirectoryPath : String
     , sourceSubDirectories : List FileInfo
@@ -177,11 +187,13 @@ init _ =
       , editedFile = Nothing
       , editedName = ""
       , error = Nothing
+      , filesToDelete = []
       , filter = ""
       , filteredDestinationSubdirectories = []
       , filteredSourceDirectoryFiles = []
       , history = []
       , pathSeparator = unixPathSep
+      , focusedZone = LeftSide
       , sourceDirectoryFiles = []
       , sourceDirectoryPath = "."
       , sourceSubDirectories = []
@@ -212,13 +224,16 @@ type Msg
     | BackendReturnedSourceDirectoryPath String
     | NoOp
     | UserChangedFilter String
+    | UserClickedCancel
     | UserClickedClearFilter
+    | UserClickedDelete
     | UserClickedDestinationDirectory FileInfo
     | UserClickedDestinationDirectoryButton
     | UserClickedDestinationFile FileInfo
     | UserClickedSourceDirectory FileInfo
     | UserClickedSourceDirectoryButton
     | UserClickedSourceFile FileInfo
+    | UserChangedFocusedZone FocusedZone
     | UserModifiedFileName String
     | UserPressedKey Target KeyboardEvent
     | UserValidatedFilename
@@ -464,6 +479,17 @@ update msg model =
             , getSourceDirectoryContent newSourcePath
             )
 
+        UserChangedFocusedZone focus ->
+            ( { model | focusedZone = focus }, Cmd.none )
+
+        UserClickedDelete ->
+            removeSelectedFiles model
+
+        UserClickedCancel ->
+            ( { model | filesToDelete = [], focusedZone = LeftSide }
+            , Cmd.none
+            )
+
 
 parentDir : Model -> String -> String
 parentDir model path =
@@ -550,22 +576,35 @@ renameSelectedFile model =
             ( model, Cmd.none )
 
 
-removeSelectedFile : Model -> ( Model, Cmd Msg )
-removeSelectedFile model =
-    let
-        fileToRemove =
+prepareSelectedFilesForRemoval : Model -> ( Model, Cmd Msg )
+prepareSelectedFilesForRemoval model =
+    ( { model
+        | filesToDelete =
             model.filteredSourceDirectoryFiles
-                |> List.Extra.find .isSelected
-                |> Debug.log "fileToRemove"
-    in
-    case fileToRemove of
-        Just fileInfo ->
-            ( model
-            , removeFile <| Json.Encode.string <| Debug.log "filepath" <| model.sourceDirectoryPath ++ model.pathSeparator ++ fileInfo.name
-            )
+                |> List.filter .isSelected
+        , focusedZone = Confirmation
+      }
+    , Cmd.none
+    )
 
-        Nothing ->
-            ( model, Cmd.none )
+
+removeSelectedFiles : Model -> ( Model, Cmd Msg )
+removeSelectedFiles model =
+    ( { model
+        | filesToDelete = []
+        , focusedZone = LeftSide
+      }
+    , model.filesToDelete
+        |> List.map
+            (\fileInfo ->
+                removeFile <|
+                    Json.Encode.string <|
+                        model.sourceDirectoryPath
+                            ++ model.pathSeparator
+                            ++ fileInfo.name
+            )
+        |> Cmd.batch
+    )
 
 
 applyRenamming : Model -> ( Model, Cmd Msg )
@@ -694,7 +733,7 @@ processKeyboardShortcut model target event =
             selectAllFiles model target
 
         ( Key.Backspace, False, True ) ->
-            removeSelectedFile model
+            prepareSelectedFilesForRemoval model
 
         ( Key.M, False, False ) ->
             moveSelectedSourceFiles model
@@ -703,7 +742,7 @@ processKeyboardShortcut model target event =
             renameSelectedFile model
 
         ( Key.Delete, False, False ) ->
-            removeSelectedFile model
+            prepareSelectedFilesForRemoval model
 
         ( Key.U, False, False ) ->
             cancel model
@@ -792,6 +831,9 @@ viewHeader model =
                 , type_ "text"
                 , autocomplete False
                 , onInput UserChangedFilter
+                , onFocus (UserChangedFocusedZone Filtering)
+
+                --, onBlur (UserChangedFocusedZone LeftSide)
                 , value model.filter
                 , placeholder "Enter one or more words to filter source files and destination directories"
                 ]
@@ -807,10 +849,12 @@ viewLeftSide model =
         conditionalAttributes =
             case model.editedFile of
                 Just a ->
-                    []
+                    [ onFocus (UserChangedFocusedZone NameEditor) ]
 
                 Nothing ->
-                    [ Events.preventDefaultOn "keydown" (keyDecoder Source) ]
+                    [ Events.preventDefaultOn "keydown" (keyDecoder Source)
+                    , onFocus (UserChangedFocusedZone LeftSide)
+                    ]
     in
     div
         ([ id "container-left"
@@ -845,6 +889,7 @@ viewRightSide model =
     div
         ([ id "container-right"
          , tabindex 2
+         , onFocus (UserChangedFocusedZone RightSide)
          ]
             ++ conditionalAttributes
         )
@@ -1066,11 +1111,51 @@ viewDate model time =
 
 viewFooter : Model -> Html Msg
 viewFooter model =
-    footer []
+    footer
+        [ class <|
+            if model.error /= Nothing || List.length model.filesToDelete > 0 then
+                "danger"
+
+            else
+                ""
+        ]
         [ case model.error of
             Nothing ->
-                text "TODO display help"
+                viewFocusedZone model
 
             Just errorMsg ->
                 text errorMsg
+        , case model.filesToDelete of
+            [] ->
+                text ""
+
+            _ ->
+                span
+                    []
+                    [ text "This will permanently delete the selected files. This cannot be undone."
+                    , button [ class "btn", onClick UserClickedCancel ] [ text "Cancel" ]
+                    , button [ class "btn", onClick UserClickedDelete, id "deleteButton" ] [ text "DELETE" ]
+                    ]
         ]
+
+
+viewFocusedZone : Model -> Html Msg
+viewFocusedZone model =
+    text <|
+        "focused zone"
+            ++ (case model.focusedZone of
+                    Confirmation ->
+                        "Confirmation "
+
+                    Filtering ->
+                        "Filtering "
+
+                    LeftSide ->
+                        "LeftSide "
+
+                    NameEditor ->
+                        "NameEditor "
+
+                    RightSide ->
+                        "RightSide "
+               )
