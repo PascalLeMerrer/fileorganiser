@@ -43,6 +43,17 @@ h2 {
   border-radius: 3px;
   border: none;
   cursor: pointer;
+  min-width: 60px;
+  height: 30px;
+  line-height: 30px;
+  margin: 0 0 0 20px;
+  padding: 0 8px;
+}
+
+.panel-header .btn {
+  min-width: 30px;
+  height: 20px;
+  line-height: 20px;
 }
 
 .input-box .btn {
@@ -54,7 +65,8 @@ h2 {
 }
 
 .btn:hover {
-  color: #333333;
+  color: white;
+  background-color: darkgrey;
 }
 
 #deleteButton {
@@ -63,7 +75,7 @@ h2 {
   font-weight: bold;
 }
 #deleteButton:hover {
-
+  background-color: #801515;
 }
 
 .input-box .input {
@@ -125,7 +137,6 @@ h2 {
   grid-template-columns: 1fr 1fr;
 }
 
-
 header {
   grid-column-start: 1;
   grid-column-end: 3;
@@ -174,7 +185,6 @@ footer {
   padding: 10px;
   display: flex;
   flex-direction: row;
-  justify-content: space-between;
   align-items: center;
   margin:  0 5px 5px 5px;
 }
@@ -188,7 +198,6 @@ footer {
 
 .panel-content {
   padding: 5px;
-
   overflow-y: scroll;
   min-height: 0;
 }
