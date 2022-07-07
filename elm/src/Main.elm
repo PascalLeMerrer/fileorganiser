@@ -389,12 +389,7 @@ update msg model =
                 )
 
         UserPressedKey target event ->
-            case model.editedFile of
-                Nothing ->
-                    processKeyboardShortcut model target event
-
-                _ ->
-                    ( model, Cmd.none )
+            processKeyboardShortcut model target event
 
         NoOp ->
             ( model, Cmd.none )
@@ -446,7 +441,7 @@ update msg model =
             ( { model | editedName = newName }, Cmd.none )
 
         UserValidatedFilename ->
-            applyRenamming model
+            applyRenaming model
 
         UserClickedDestinationDirectory fileInfo ->
             let
@@ -607,8 +602,8 @@ removeSelectedFiles model =
     )
 
 
-applyRenamming : Model -> ( Model, Cmd Msg )
-applyRenamming model =
+applyRenaming : Model -> ( Model, Cmd Msg )
+applyRenaming model =
     let
         oldName =
             model.editedFile
@@ -722,6 +717,37 @@ selectAllFiles model target =
 
 processKeyboardShortcut : Model -> Target -> KeyboardEvent -> ( Model, Cmd Msg )
 processKeyboardShortcut model target event =
+    case model.focusedZone of
+        Confirmation ->
+            processConfirmationShortcuts model event
+
+        LeftSide ->
+            processMainShortcuts model target event
+
+        RightSide ->
+            processMainShortcuts model target event
+
+        _ ->
+            ( model, Cmd.none )
+
+
+processConfirmationShortcuts : Model -> KeyboardEvent -> ( Model, Cmd Msg )
+processConfirmationShortcuts model event =
+    case ( event.keyCode, event.ctrlKey, event.metaKey ) of
+        ( Key.Enter, False, False ) ->
+            removeSelectedFiles model
+
+        ( Key.Escape, False, False ) ->
+            ( { model | filesToDelete = [], focusedZone = LeftSide }
+            , Cmd.none
+            )
+
+        _ ->
+            ( model, Cmd.none )
+
+
+processMainShortcuts : Model -> Target -> KeyboardEvent -> ( Model, Cmd Msg )
+processMainShortcuts model target event =
     case ( event.keyCode, event.ctrlKey, event.metaKey ) of
         ( Key.F2, False, False ) ->
             renameSelectedFile model
@@ -1111,14 +1137,30 @@ viewDate model time =
 
 viewFooter : Model -> Html Msg
 viewFooter model =
-    footer
-        [ class <|
-            if model.error /= Nothing || List.length model.filesToDelete > 0 then
+    let
+        isWaitingForConfirmation =
+            List.length model.filesToDelete > 0
+
+        className =
+            if model.error /= Nothing || isWaitingForConfirmation then
                 "danger"
 
             else
                 ""
-        ]
+
+        conditionalAttributes =
+            if isWaitingForConfirmation then
+                [ Events.preventDefaultOn "keydown" (keyDecoder Source)
+                , onFocus (UserChangedFocusedZone Confirmation)
+                ]
+
+            else
+                []
+    in
+    footer
+        ([ class className ]
+            ++ conditionalAttributes
+        )
         [ case model.error of
             Nothing ->
                 viewFocusedZone model
