@@ -10,6 +10,7 @@ import (
 )
 
 const pathSeperator = `\`
+const dotCharacter = 46
 
 // isHidden checks if a file is hidden on Windows.
 func isHidden(filename, baseDir string) (bool, error) {

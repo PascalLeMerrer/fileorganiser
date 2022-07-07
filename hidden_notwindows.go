@@ -7,7 +7,6 @@ import (
     "strings"
 )
 
-const dotCharacter = 46
 const pathSeperator = "/"
 
 // isHidden checks if a file is hidden on Unix operating systems
