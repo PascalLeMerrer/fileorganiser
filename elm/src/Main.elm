@@ -230,6 +230,7 @@ type Msg
     | UserClickedDestinationDirectory FileInfo
     | UserClickedDestinationDirectoryButton
     | UserClickedDestinationFile FileInfo
+    | UserClickedReload Target
     | UserClickedSourceDirectory FileInfo
     | UserClickedSourceDirectoryButton
     | UserClickedSourceFile FileInfo
@@ -484,6 +485,9 @@ update msg model =
             ( { model | filesToDelete = [], focusedZone = LeftSide }
             , Cmd.none
             )
+
+        UserClickedReload target ->
+            reload model target
 
 
 parentDir : Model -> String -> String
@@ -971,11 +975,18 @@ viewSourceSubdirectories model =
     div [ class "panel" ]
         [ div [ class "panel-header" ]
             [ h2 [] [ text <| "Source directory: " ++ currentDirName ]
-            , button
-                [ class "btn"
-                , onClick UserClickedSourceDirectoryButton
+            , span []
+                [ button
+                    [ class "btn"
+                    , onClick (UserClickedReload Source)
+                    ]
+                    [ text "Refresh" ]
+                , button
+                    [ class "btn"
+                    , onClick UserClickedSourceDirectoryButton
+                    ]
+                    [ text "..." ]
                 ]
-                [ text "..." ]
             ]
         , div
             [ class "panel-content" ]
@@ -997,11 +1008,18 @@ viewDestinationSubdirectories model =
     div [ class "panel" ]
         [ div [ class "panel-header" ]
             [ h2 [] [ text <| "Destination directory: " ++ currentDirName ]
-            , button
-                [ class "btn"
-                , onClick UserClickedDestinationDirectoryButton
+            , span []
+                [ button
+                    [ class "btn"
+                    , onClick (UserClickedReload Destination)
+                    ]
+                    [ text "Refresh" ]
+                , button
+                    [ class "btn"
+                    , onClick UserClickedDestinationDirectoryButton
+                    ]
+                    [ text "..." ]
                 ]
-                [ text "..." ]
             ]
         , div
             [ class "panel-content" ]
