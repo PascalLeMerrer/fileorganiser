@@ -715,6 +715,23 @@ selectAllFiles model target =
             )
 
 
+reload : Model -> Target -> ( Model, Cmd Msg )
+reload model target =
+    case target of
+        Source ->
+            ( model
+            , getSourceDirectoryContent model.sourceDirectoryPath
+            )
+
+        Destination ->
+            ( model
+            , Cmd.batch
+                [ getDestinationSubdirectories model.destinationDirectoryPath
+                , getDestinationDirectoryFiles model.destinationDirectoryPath
+                ]
+            )
+
+
 processKeyboardShortcut : Model -> Target -> KeyboardEvent -> ( Model, Cmd Msg )
 processKeyboardShortcut model target event =
     case model.focusedZone of
@@ -752,6 +769,9 @@ processMainShortcuts model target event =
         ( Key.F2, False, False ) ->
             renameSelectedFile model
 
+        ( Key.F5, False, False ) ->
+            reload model target
+
         ( Key.A, True, False ) ->
             selectAllFiles model target
 
@@ -766,6 +786,9 @@ processMainShortcuts model target event =
 
         ( Key.R, False, False ) ->
             renameSelectedFile model
+
+        ( Key.R, True, False ) ->
+            reload model target
 
         ( Key.Delete, False, False ) ->
             prepareSelectedFilesForRemoval model
