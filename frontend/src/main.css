@@ -78,12 +78,25 @@ h2 {
   background-color: #801515;
 }
 
+form {
+  display: flex;
+}
+
+.fileinfo-input {
+  height: 15px;
+  flex: 1;
+  border:  none;
+}
+
+.input-box .input {
+
+    height: 30px;
+}
 .input-box .input {
   flex: 1;
   border: none;
   border-radius: 3px;
   outline: none;
-  height: 30px;
   line-height: 15px;
   padding: 0 10px;
   background-color: rgba(240, 240, 240, 1);
