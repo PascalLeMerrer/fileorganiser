@@ -541,7 +541,11 @@ filterDestinationDirectories model =
 
 filterByName : List String -> FileInfo -> Bool
 filterByName filters fileInfo =
-    List.all (\word -> String.contains word fileInfo.name) filters
+    let
+        searchedValue =
+            String.toLower fileInfo.name
+    in
+    List.all (\word -> String.contains (String.toLower word) searchedValue) filters
 
 
 moveSelectedSourceFiles : Model -> ( Model, Cmd Msg )
