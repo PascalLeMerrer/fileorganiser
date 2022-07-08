@@ -764,12 +764,26 @@ openSelectedFile model target =
                     , model.destinationDirectoryPath
                     )
     in
-    case Debug.log "fileToOpen" fileToOpen of
+    case fileToOpen of
         Just fileInfo ->
             ( model, openFile <| Debug.log "path" <| dirPath ++ model.pathSeparator ++ fileInfo.name )
 
         Nothing ->
             ( model, Cmd.none )
+
+
+openSelectedFolder : Model -> Target -> ( Model, Cmd Msg )
+openSelectedFolder model target =
+    let
+        folderToOpen =
+            case target of
+                Source ->
+                    model.sourceDirectoryPath
+
+                Destination ->
+                    model.destinationDirectoryPath
+    in
+    ( model, openFile folderToOpen )
 
 
 processKeyboardShortcut : Model -> Target -> KeyboardEvent -> ( Model, Cmd Msg )
@@ -820,6 +834,9 @@ processMainShortcuts model target event =
 
         ( Key.Backspace, False, True ) ->
             prepareSelectedFilesForRemoval model
+
+        ( Key.F, False, False ) ->
+            openSelectedFolder model target
 
         ( Key.M, False, False ) ->
             moveSelectedSourceFiles model
