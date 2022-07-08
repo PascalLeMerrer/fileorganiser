@@ -109,6 +109,9 @@ h2 {
   word-break: break-all;
 }
 
+.fileinfo { background: ghostwhite; }
+.fileinfo:nth-child(odd) { background: #DDD; }
+
 .filename.selected {
   font-weight: bold;
 }
@@ -120,6 +123,7 @@ h2 {
 .filename {
   align-self: flex-start;
   flex:  1;
+  margin-left: 5px;
   margin-right: 10px;
   word-break: break-all;
 }
