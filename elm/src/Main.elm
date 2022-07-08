@@ -1037,7 +1037,7 @@ viewDestinationSubdirectories model =
 viewDirectory : Model -> (FileInfo -> Msg) -> FileInfo -> Html Msg
 viewDirectory model onClickMsg fileInfo =
     div
-        [ class "fileinfo"
+        [ class "fileinfo dir"
         , onClick (onClickMsg fileInfo)
         ]
         [ text <| fileInfo.name ]

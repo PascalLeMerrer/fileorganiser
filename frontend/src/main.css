@@ -89,9 +89,13 @@ form {
 }
 
 .input-box .input {
-
     height: 30px;
 }
+
+.fileinfo.dir {
+  padding-left:  5px;
+}
+
 .input-box .input {
   flex: 1;
   border: none;
