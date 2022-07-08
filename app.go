@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+	"github.com/skratchdot/open-golang/open"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
@@ -259,4 +260,8 @@ func (a *App) Remove(filePath string) (FileInfo, error) {
     }
     err = os.Remove(filePath)
 	return fileInfo, err
+}
+
+func (a *App) OpenFile(filePath string) error {
+	return open.Start(filePath)
 }

@@ -130,6 +130,20 @@
             app.ports.fileRemoved.send(result);
           }
         ).catch(msg => {
+          console.error(msg);
+          app.ports.receiveError.send(msg);
+        });
+      });
+
+      // Open a file using the default app
+      app.ports.openFile.subscribe(function (filePath) {
+        window.go.main.App.OpenFile(filePath)
+        .then((result) =>
+          {
+            console.log("opened file", filePath)
+          }
+        ).catch(msg => {
+          console.error(msg);
           app.ports.receiveError.send(msg);
         });
       });

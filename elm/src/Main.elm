@@ -108,6 +108,9 @@ port getDestinationSubdirectories : String -> Cmd msg
 port moveFiles : ( List String, String ) -> Cmd msg
 
 
+port openFile : String -> Cmd msg
+
+
 port removeFile : Json.Encode.Value -> Cmd msg
 
 
@@ -702,7 +705,7 @@ selectAllFiles model target =
     case target of
         Source ->
             let
-                -- TODO should we selected filtered files only?
+                -- TODO should we select filtered files only?
                 updatedFiles =
                     model.sourceDirectoryFiles
                         |> List.map (\f -> { f | isSelected = True })
@@ -742,6 +745,31 @@ reload model target =
                 , getDestinationDirectoryFiles model.destinationDirectoryPath
                 ]
             )
+
+
+openSelectedFile : Model -> Target -> ( Model, Cmd Msg )
+openSelectedFile model target =
+    let
+        ( fileToOpen, dirPath ) =
+            case target of
+                Source ->
+                    ( model.filteredSourceDirectoryFiles
+                        |> List.Extra.find .isSelected
+                    , model.sourceDirectoryPath
+                    )
+
+                Destination ->
+                    ( model.destinationDirectoryFiles
+                        |> List.Extra.find .isSelected
+                    , model.destinationDirectoryPath
+                    )
+    in
+    case Debug.log "fileToOpen" fileToOpen of
+        Just fileInfo ->
+            ( model, openFile <| Debug.log "path" <| dirPath ++ model.pathSeparator ++ fileInfo.name )
+
+        Nothing ->
+            ( model, Cmd.none )
 
 
 processKeyboardShortcut : Model -> Target -> KeyboardEvent -> ( Model, Cmd Msg )
@@ -795,6 +823,9 @@ processMainShortcuts model target event =
 
         ( Key.M, False, False ) ->
             moveSelectedSourceFiles model
+
+        ( Key.O, False, False ) ->
+            openSelectedFile model target
 
         ( Key.R, False, False ) ->
             renameSelectedFile model
