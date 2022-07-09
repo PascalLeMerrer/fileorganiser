@@ -164,12 +164,13 @@ port receiveSubDirectories : (Json.Encode.Value -> msg) -> Sub msg
 type alias Model =
     { destinationDirectoryFiles : List FileInfo
     , destinationDirectoryPath : String
+    , destinationFilter : String
     , destinationSubdirectories : List FileInfo
     , editedFile : Maybe FileInfo
     , editedName : String
     , error : Maybe String
     , filesToDelete : List FileInfo
-    , filter : String
+    , sourceFilter : String
     , filteredDestinationSubdirectories : List FileInfo
     , filteredSourceDirectoryFiles : List FileInfo
     , history : List Command
@@ -186,12 +187,13 @@ init : () -> ( Model, Cmd Msg )
 init _ =
     ( { destinationDirectoryFiles = []
       , destinationDirectoryPath = ""
+      , destinationFilter = ""
       , destinationSubdirectories = []
       , editedFile = Nothing
       , editedName = ""
       , error = Nothing
       , filesToDelete = []
-      , filter = ""
+      , sourceFilter = ""
       , filteredDestinationSubdirectories = []
       , filteredSourceDirectoryFiles = []
       , history = []
@@ -226,9 +228,11 @@ type Msg
     | BackendReturnedSourceDirectoryContent (List FileInfo)
     | BackendReturnedSourceDirectoryPath String
     | NoOp
-    | UserChangedFilter String
+    | UserChangedDestinationFilter String
+    | UserChangedSourceFilter String
     | UserClickedCancel
-    | UserClickedClearFilter
+    | UserClickedClearSourceFilter
+    | UserClickedClearDestinationFilter
     | UserClickedDelete
     | UserClickedDestinationDirectory FileInfo
     | UserClickedDestinationDirectoryButton
@@ -398,15 +402,25 @@ update msg model =
         NoOp ->
             ( model, Cmd.none )
 
-        UserChangedFilter filteringString ->
-            ( { model | filter = filteringString }
+        UserChangedSourceFilter filteringString ->
+            ( { model | sourceFilter = filteringString }
                 |> filterSourceFiles
+            , Cmd.none
+            )
+
+        UserChangedDestinationFilter filteringString ->
+            ( { model | destinationFilter = filteringString }
                 |> filterDestinationDirectories
             , Cmd.none
             )
 
-        UserClickedClearFilter ->
-            ( { model | filter = "" } |> filterSourceFiles
+        UserClickedClearDestinationFilter ->
+            ( { model | destinationFilter = "" } |> filterDestinationDirectories
+            , Cmd.none
+            )
+
+        UserClickedClearSourceFilter ->
+            ( { model | sourceFilter = "" } |> filterSourceFiles
             , Cmd.none
             )
 
@@ -508,7 +522,7 @@ filterSourceFiles : Model -> Model
 filterSourceFiles model =
     let
         words =
-            String.words model.filter
+            String.words model.sourceFilter
     in
     case words of
         [] ->
@@ -527,7 +541,7 @@ filterDestinationDirectories : Model -> Model
 filterDestinationDirectories model =
     let
         words =
-            String.words model.filter
+            String.words model.destinationFilter
     in
     case words of
         [] ->
@@ -936,18 +950,30 @@ viewHeader model =
             ]
             [ input
                 [ class "input"
-                , id "filter"
                 , type_ "text"
                 , autocomplete False
-                , onInput UserChangedFilter
+                , onInput UserChangedSourceFilter
                 , onFocus (UserChangedFocusedZone Filtering)
-
-                --, onBlur (UserChangedFocusedZone LeftSide)
-                , value model.filter
-                , placeholder "Enter one or more words to filter source files and destination directories"
+                , value model.sourceFilter
+                , placeholder "Enter one or more words to filter source files"
                 ]
                 []
-            , button [ class "btn", onClick UserClickedClearFilter ] [ text "Clear" ]
+            , button [ class "btn", onClick UserClickedClearSourceFilter ] [ text "Clear" ]
+            ]
+        , div
+            [ class "input-box"
+            ]
+            [ input
+                [ class "input"
+                , type_ "text"
+                , autocomplete False
+                , onInput UserChangedDestinationFilter
+                , onFocus (UserChangedFocusedZone Filtering)
+                , value model.destinationFilter
+                , placeholder "Enter one or more words to filter destination directories"
+                ]
+                []
+            , button [ class "btn", onClick UserClickedClearDestinationFilter ] [ text "Clear" ]
             ]
         ]
 
