@@ -3,7 +3,7 @@ port module Main exposing (..)
 import Browser
 import Filesize
 import Html exposing (Html, button, div, footer, form, h2, header, input, span, text)
-import Html.Attributes exposing (autocomplete, autofocus, class, id, placeholder, tabindex, type_, value)
+import Html.Attributes exposing (autocomplete, autofocus, class, disabled, id, placeholder, tabindex, type_, value)
 import Html.Events as Events exposing (onClick, onFocus, onInput, onSubmit)
 import Iso8601
 import Json.Decode exposing (Decoder, list)
@@ -162,7 +162,8 @@ port receiveSubDirectories : (Json.Encode.Value -> msg) -> Sub msg
 
 
 type alias Model =
-    { destinationDirectoryFiles : List FileInfo
+    { areFilterSynchronized : Bool
+    , destinationDirectoryFiles : List FileInfo
     , destinationDirectoryPath : String
     , destinationFilter : String
     , destinationSubdirectories : List FileInfo
@@ -185,7 +186,8 @@ type alias Model =
 
 init : () -> ( Model, Cmd Msg )
 init _ =
-    ( { destinationDirectoryFiles = []
+    ( { areFilterSynchronized = False
+      , destinationDirectoryFiles = []
       , destinationDirectoryPath = ""
       , destinationFilter = ""
       , destinationSubdirectories = []
@@ -234,6 +236,7 @@ type Msg
     | UserClickedClearSourceFilter
     | UserClickedClearDestinationFilter
     | UserClickedDelete
+    | UserClickedSynchronizeButton
     | UserClickedDestinationDirectory FileInfo
     | UserClickedDestinationDirectoryButton
     | UserClickedDestinationFile FileInfo
@@ -405,6 +408,7 @@ update msg model =
         UserChangedSourceFilter filteringString ->
             ( { model | sourceFilter = filteringString }
                 |> filterSourceFiles
+                |> synchronizeFilters
             , Cmd.none
             )
 
@@ -420,7 +424,9 @@ update msg model =
             )
 
         UserClickedClearSourceFilter ->
-            ( { model | sourceFilter = "" } |> filterSourceFiles
+            ( { model | sourceFilter = "" }
+                |> filterSourceFiles
+                |> synchronizeFilters
             , Cmd.none
             )
 
@@ -506,6 +512,12 @@ update msg model =
         UserClickedReload target ->
             reload model target
 
+        UserClickedSynchronizeButton ->
+            ( { model | areFilterSynchronized = not model.areFilterSynchronized }
+                |> synchronizeFilters
+            , Cmd.none
+            )
+
 
 parentDir : Model -> String -> String
 parentDir model path =
@@ -567,6 +579,16 @@ filterByName filters fileInfo =
                 String.toLower fileInfo.name
         in
         List.all (\word -> String.contains (String.toLower word) lowerCaseFilename) filters
+
+
+synchronizeFilters : Model -> Model
+synchronizeFilters model =
+    if model.areFilterSynchronized then
+        { model | destinationFilter = model.sourceFilter }
+            |> filterDestinationDirectories
+
+    else
+        model
 
 
 moveSelectedSourceFiles : Model -> ( Model, Cmd Msg )
@@ -960,6 +982,15 @@ viewHeader model =
                 []
             , button [ class "btn", onClick UserClickedClearSourceFilter ] [ text "Clear" ]
             ]
+        , div []
+            [ button [ class "btn link", onClick UserClickedSynchronizeButton ]
+                [ if model.areFilterSynchronized then
+                    text "Unlink"
+
+                  else
+                    text "Link"
+                ]
+            ]
         , div
             [ class "input-box"
             ]
@@ -971,9 +1002,15 @@ viewHeader model =
                 , onFocus (UserChangedFocusedZone Filtering)
                 , value model.destinationFilter
                 , placeholder "Enter one or more words to filter destination directories"
+                , disabled model.areFilterSynchronized
                 ]
                 []
-            , button [ class "btn", onClick UserClickedClearDestinationFilter ] [ text "Clear" ]
+            , button
+                [ class "btn"
+                , onClick UserClickedClearDestinationFilter
+                , disabled model.areFilterSynchronized
+                ]
+                [ text "Clear" ]
             ]
         ]
 
