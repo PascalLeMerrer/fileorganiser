@@ -58,6 +58,7 @@ type FileInfo struct {
     Mode    os.FileMode
     ModTime time.Time
     IsDir   bool
+    PreviousName string
 }
 
 
@@ -242,6 +243,7 @@ func (a *App) Rename(oldName string, newName string) (FileInfo, error) {
         Mode:    info.Mode(),
         ModTime: info.ModTime(),
         IsDir:   info.IsDir(),
+        PreviousName: oldName,
     }
 	return result, nil
 }

@@ -3,7 +3,7 @@ port module Main exposing (..)
 import Browser
 import Filesize
 import Html exposing (Html, button, div, footer, form, h2, header, input, span, text)
-import Html.Attributes exposing (autocomplete, autofocus, class, disabled, id, placeholder, tabindex, type_, value)
+import Html.Attributes exposing (autofocus, class, disabled, id, placeholder, tabindex, type_, value)
 import Html.Events as Events exposing (onClick, onFocus, onInput, onSubmit)
 import Iso8601
 import Json.Decode exposing (Decoder, list)
@@ -12,6 +12,7 @@ import Json.Encode
 import Keyboard.Event exposing (KeyboardEvent, decodeKeyboardEvent)
 import Keyboard.Key as Key
 import List.Extra
+import String.Mark as Mark exposing (defaultOptions)
 import Task
 import Time exposing (Month(..), Posix)
 
@@ -54,6 +55,7 @@ type FocusedZone
     | LeftSide
     | NameEditor
     | RightSide
+    | SourceSearchReplace
 
 
 type alias Command =
@@ -172,6 +174,8 @@ type alias Model =
     , error : Maybe String
     , filesToDelete : List FileInfo
     , sourceFilter : String
+    , sourceSearch : String
+    , sourceReplace : String
     , filteredDestinationSubdirectories : List FileInfo
     , filteredSourceDirectoryFiles : List FileInfo
     , history : List Command
@@ -196,6 +200,8 @@ init _ =
       , error = Nothing
       , filesToDelete = []
       , sourceFilter = ""
+      , sourceSearch = ""
+      , sourceReplace = ""
       , filteredDestinationSubdirectories = []
       , filteredSourceDirectoryFiles = []
       , history = []
@@ -225,25 +231,28 @@ type Msg
     | BackendReturnedDestinationFiles (List FileInfo)
     | BackendReturnedError String
     | BackendReturnedMovedFiles (List FileInfo)
-    | BackendReturnedRemovedFile FileInfo
-    | BackendReturnedRenamedFile FileInfo
+    | BackendReturnedRemovedFile FileInfo String
+    | BackendReturnedRenamedFile FileInfo String
     | BackendReturnedSourceDirectoryContent (List FileInfo)
     | BackendReturnedSourceDirectoryPath String
     | NoOp
     | UserChangedDestinationFilter String
     | UserChangedSourceFilter String
+    | UserChangedSourceReplace String
+    | UserChangedSourceSearch String
     | UserClickedCancel
     | UserClickedClearSourceFilter
     | UserClickedClearDestinationFilter
     | UserClickedDelete
-    | UserClickedSynchronizeButton
     | UserClickedDestinationDirectory FileInfo
     | UserClickedDestinationDirectoryButton
     | UserClickedDestinationFile FileInfo
     | UserClickedReload Target
+    | UserClickedReplaceButton
     | UserClickedSourceDirectory FileInfo
     | UserClickedSourceDirectoryButton
     | UserClickedSourceFile FileInfo
+    | UserClickedSynchronizeButton
     | UserChangedFocusedZone FocusedZone
     | UserModifiedFileName String
     | UserPressedKey Target KeyboardEvent
@@ -343,34 +352,31 @@ update msg model =
                 ]
             )
 
-        BackendReturnedRemovedFile fileInfo ->
+        BackendReturnedRemovedFile _ _ ->
+            -- TODO remove the unused params
             ( model, getSourceDirectoryContent model.sourceDirectoryPath )
 
-        BackendReturnedRenamedFile fileInfo ->
+        BackendReturnedRenamedFile fileInfo originalPath ->
+            let
+                newFileInfo =
+                    { fileInfo | isSelected = True }
+
+                newPath =
+                    model.sourceDirectoryPath
+                        ++ model.pathSeparator
+                        ++ newFileInfo.name
+
+                command : Command
+                command =
+                    { operation = Rename
+                    , files = [ newFileInfo ]
+                    , destination = Just newPath
+                    , source = Just originalPath
+                    }
+            in
             case model.editedFile of
                 Just editedFile ->
                     let
-                        newFileInfo =
-                            { fileInfo | isSelected = True }
-
-                        originalPath =
-                            model.sourceDirectoryPath
-                                ++ model.pathSeparator
-                                ++ editedFile.name
-
-                        newPath =
-                            model.sourceDirectoryPath
-                                ++ model.pathSeparator
-                                ++ newFileInfo.name
-
-                        command : Command
-                        command =
-                            { operation = Rename
-                            , files = [ newFileInfo ]
-                            , destination = Just newPath
-                            , source = Just originalPath
-                            }
-
                         updatedSourceFiles =
                             List.Extra.updateIf (\f -> f == editedFile) (\_ -> newFileInfo) model.sourceDirectoryFiles
                     in
@@ -385,8 +391,11 @@ update msg model =
                     )
 
                 Nothing ->
-                    ( { model | error = Just ("File was unexpectedLy renamed to " ++ fileInfo.name) }
-                    , Cmd.none
+                    -- TODO update the modified file or reload all
+                    ( { model
+                        | history = command :: model.history
+                      }
+                    , getSourceDirectoryContent model.sourceDirectoryPath
                     )
 
         BackendReturnedSourceDirectoryPath path ->
@@ -465,7 +474,14 @@ update msg model =
             ( { model | editedName = newName }, Cmd.none )
 
         UserValidatedFilename ->
-            applyRenaming model
+            case model.editedFile of
+                Just fileInfo ->
+                    ( model
+                    , applyRenaming model fileInfo.name model.editedName
+                    )
+
+                Nothing ->
+                    ( model, Cmd.none )
 
         UserClickedDestinationDirectory fileInfo ->
             let
@@ -517,6 +533,41 @@ update msg model =
                 |> synchronizeFilters
             , Cmd.none
             )
+
+        UserChangedSourceReplace replaceString ->
+            { model | sourceReplace = replaceString }
+                |> replaceInSourceFilenames
+
+        UserChangedSourceSearch searchString ->
+            ( { model | sourceSearch = searchString }, Cmd.none )
+
+        UserClickedReplaceButton ->
+            let
+                ( oldNames, newNames ) =
+                    model
+                        |> filterSourceFiles
+                        |> .filteredSourceDirectoryFiles
+                        |> List.filterMap (nameReplacement model.sourceSearch model.sourceReplace)
+                        |> List.unzip
+
+                -- TODO create a list of commands
+            in
+            ( { model | sourceReplace = "" }
+            , List.map2 (applyRenaming model) oldNames newNames
+                |> Cmd.batch
+            )
+
+
+nameReplacement : String -> String -> FileInfo -> Maybe ( String, String )
+nameReplacement before after fileInfo =
+    if String.contains before fileInfo.name then
+        Just
+            ( fileInfo.name
+            , String.replace before after fileInfo.name
+            )
+
+    else
+        Nothing
 
 
 parentDir : Model -> String -> String
@@ -653,24 +704,39 @@ removeSelectedFiles model =
     )
 
 
-applyRenaming : Model -> ( Model, Cmd Msg )
-applyRenaming model =
-    let
-        oldName =
-            model.editedFile
-                |> Maybe.map (\f -> model.sourceDirectoryPath ++ model.pathSeparator ++ f.name)
-                |> Maybe.withDefault ""
+replaceInSourceFilenames : Model -> ( Model, Cmd Msg )
+replaceInSourceFilenames model =
+    ( { model
+        | filteredSourceDirectoryFiles =
+            List.map (replace model.sourceSearch model.sourceReplace) model.sourceDirectoryFiles
+      }
+    , Cmd.none
+    )
 
-        newName =
-            model.sourceDirectoryPath ++ model.pathSeparator ++ model.editedName
+
+replace : String -> String -> FileInfo -> FileInfo
+replace before after fileInfo =
+    { fileInfo
+        | name = String.replace before after fileInfo.name
+    }
+
+
+applyRenaming : Model -> String -> String -> Cmd Msg
+applyRenaming model oldName newName =
+    let
+        oldPath =
+            model.sourceDirectoryPath ++ model.pathSeparator ++ oldName
+
+        newPath =
+            model.sourceDirectoryPath ++ model.pathSeparator ++ newName
 
         encodedValue =
             Json.Encode.object
-                [ ( "oldName", Json.Encode.string oldName )
-                , ( "newName", Json.Encode.string newName )
+                [ ( "oldName", Json.Encode.string oldPath )
+                , ( "newName", Json.Encode.string newPath )
                 ]
     in
-    ( model, renameFile encodedValue )
+    renameFile encodedValue
 
 
 cancel : Model -> ( Model, Cmd Msg )
@@ -936,17 +1002,23 @@ decodeFileInfoList msg value =
             BackendReturnedError (Json.Decode.errorToString error)
 
 
-decodeFileInfo : (FileInfo -> Msg) -> Json.Encode.Value -> Msg
+decodeFileInfo : (FileInfo -> String -> Msg) -> Json.Encode.Value -> Msg
 decodeFileInfo msg value =
     let
-        decodedValue =
+        decodedFileInfo =
             Json.Decode.decodeValue fileInfoDecoder value
-    in
-    case decodedValue of
-        Ok fileInfo ->
-            msg fileInfo
 
-        Err error ->
+        decodedPreviousName =
+            Json.Decode.decodeValue (Json.Decode.field "PreviousName" Json.Decode.string) value
+    in
+    case ( decodedFileInfo, decodedPreviousName ) of
+        ( Ok fileInfo, Ok previousName ) ->
+            msg fileInfo previousName
+
+        ( Ok fileInfo, Err _ ) ->
+            msg fileInfo ""
+
+        ( Err error, _ ) ->
             BackendReturnedError (Json.Decode.errorToString error)
 
 
@@ -973,7 +1045,6 @@ viewHeader model =
             [ input
                 [ class "input"
                 , type_ "text"
-                , autocomplete False
                 , onInput UserChangedSourceFilter
                 , onFocus (UserChangedFocusedZone Filtering)
                 , value model.sourceFilter
@@ -997,7 +1068,6 @@ viewHeader model =
             [ input
                 [ class "input"
                 , type_ "text"
-                , autocomplete False
                 , onInput UserChangedDestinationFilter
                 , onFocus (UserChangedFocusedZone Filtering)
                 , value model.destinationFilter
@@ -1020,13 +1090,18 @@ viewLeftSide model =
     let
         conditionalAttributes =
             case model.editedFile of
-                Just a ->
-                    [ onFocus (UserChangedFocusedZone NameEditor) ]
-
                 Nothing ->
-                    [ Events.preventDefaultOn "keydown" (keyDecoder Source)
-                    , onFocus (UserChangedFocusedZone LeftSide)
-                    ]
+                    case model.focusedZone of
+                        LeftSide ->
+                            [ Events.preventDefaultOn "keydown" (keyDecoder Source)
+                            ]
+
+                        _ ->
+                            [ onFocus (UserChangedFocusedZone LeftSide)
+                            ]
+
+                _ ->
+                    []
     in
     div
         ([ id "container-left"
@@ -1051,12 +1126,12 @@ viewRightSide : Model -> Html Msg
 viewRightSide model =
     let
         conditionalAttributes =
-            case model.editedFile of
-                Just a ->
-                    []
-
-                Nothing ->
+            case model.focusedZone of
+                RightSide ->
                     [ Events.preventDefaultOn "keydown" (keyDecoder Destination) ]
+
+                _ ->
+                    []
     in
     div
         ([ id "container-right"
@@ -1089,6 +1164,7 @@ viewSourceSubdirectories model =
         currentDirName =
             String.split model.pathSeparator model.sourceDirectoryPath
                 |> List.Extra.last
+                -- FIXME : does it work in root dir?
                 |> Maybe.withDefault "Error: cannot get current dir name"
     in
     div [ class "panel" ]
@@ -1150,7 +1226,7 @@ viewDestinationSubdirectories model =
 
 
 viewDirectory : Model -> (FileInfo -> Msg) -> FileInfo -> Html Msg
-viewDirectory model onClickMsg fileInfo =
+viewDirectory _ onClickMsg fileInfo =
     div
         [ class "fileinfo dir"
         , onClick (onClickMsg fileInfo)
@@ -1160,15 +1236,49 @@ viewDirectory model onClickMsg fileInfo =
 
 viewSourceFiles : Model -> Html Msg
 viewSourceFiles model =
+    let
+        toHighlight =
+            if model.sourceReplace /= "" then
+                model.sourceReplace
+
+            else if model.sourceSearch /= "" then
+                model.sourceSearch
+
+            else
+                ""
+    in
     div [ class "panel" ]
         [ div [ class "panel-header" ]
             [ h2 [] [ text "Source Files" ]
+            , input
+                [ class "input"
+                , onFocus (UserChangedFocusedZone SourceSearchReplace)
+                , onInput UserChangedSourceSearch
+                , placeholder "Search"
+                , type_ "text"
+                , value model.sourceSearch
+                ]
+                []
+            , input
+                [ class "input"
+                , onFocus (UserChangedFocusedZone SourceSearchReplace)
+                , onInput UserChangedSourceReplace
+                , placeholder "Replace with"
+                , type_ "text"
+                , value model.sourceReplace
+                ]
+                []
+            , button
+                [ class "btn"
+                , onClick UserClickedReplaceButton
+                ]
+                [ text "Replace" ]
             ]
         , div
             [ class "panel-content" ]
             (model.filteredSourceDirectoryFiles
                 |> List.sortBy (.name >> String.toLower)
-                |> List.map (viewFileInfo model UserClickedSourceFile)
+                |> List.map (viewFileInfo model UserClickedSourceFile toHighlight)
             )
         ]
 
@@ -1183,14 +1293,14 @@ viewDestinationFiles model =
             [ class "panel-content" ]
             (model.destinationDirectoryFiles
                 |> List.sortBy (.name >> String.toLower)
-                |> List.map (viewFileInfo model UserClickedDestinationFile)
-             --FIXME UserClickedDestinationFile
+                -- TODO pass search filter as last param
+                |> List.map (viewFileInfo model UserClickedDestinationFile "")
             )
         ]
 
 
-viewFileInfo : Model -> (FileInfo -> Msg) -> FileInfo -> Html Msg
-viewFileInfo model onClickMsg fileInfo =
+viewFileInfo : Model -> (FileInfo -> Msg) -> String -> FileInfo -> Html Msg
+viewFileInfo model onClickMsg highlighted fileInfo =
     let
         isEdited =
             case model.editedFile of
@@ -1204,11 +1314,15 @@ viewFileInfo model onClickMsg fileInfo =
         viewEditedFilename model
 
     else
-        viewReadOnlyFile model onClickMsg fileInfo
+        viewReadOnlyFile model onClickMsg highlighted fileInfo
 
 
-viewReadOnlyFile : Model -> (FileInfo -> Msg) -> FileInfo -> Html Msg
-viewReadOnlyFile model onClickMsg fileInfo =
+highlight =
+    Mark.markWith { defaultOptions | minTermLength = 1 }
+
+
+viewReadOnlyFile : Model -> (FileInfo -> Msg) -> String -> FileInfo -> Html Msg
+viewReadOnlyFile model onClickMsg highlighted fileInfo =
     let
         className =
             if fileInfo.isSelected then
@@ -1216,12 +1330,20 @@ viewReadOnlyFile model onClickMsg fileInfo =
 
             else
                 "filename"
+
+        fileName =
+            case highlighted of
+                "" ->
+                    [ text fileInfo.name ]
+
+                _ ->
+                    highlight highlighted fileInfo.name
     in
     div
         [ class "fileinfo"
         , onClick (onClickMsg fileInfo)
         ]
-        [ div [ class className ] [ text fileInfo.name ]
+        [ div [ class className ] fileName
         , div [] [ text <| Filesize.format fileInfo.size ]
         , div [ class "filemodificationdate" ] [ viewDate model fileInfo.modTime ]
         ]
@@ -1231,9 +1353,10 @@ viewEditedFilename : Model -> Html Msg
 viewEditedFilename model =
     form [ onSubmit UserValidatedFilename ]
         [ input
-            [ class "fileinfo-input"
+            [ autofocus True
+            , class "fileinfo-input"
             , onInput UserModifiedFileName
-            , autofocus True
+            , onFocus (UserChangedFocusedZone NameEditor)
             , value model.editedName
             ]
             []
@@ -1360,4 +1483,7 @@ viewFocusedZone model =
 
                     RightSide ->
                         "RightSide | "
+
+                    SourceSearchReplace ->
+                        "SourceSearchReplace | "
                )
