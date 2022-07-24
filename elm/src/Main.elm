@@ -549,8 +549,6 @@ update msg model =
                         |> .filteredSourceDirectoryFiles
                         |> List.filterMap (nameReplacement model.sourceSearch model.sourceReplace)
                         |> List.unzip
-
-                -- TODO create a list of commands
             in
             ( { model | sourceReplace = "" }
             , List.map2 (applyRenaming model) oldNames newNames
