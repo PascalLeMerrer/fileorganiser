@@ -109,12 +109,12 @@
         });
       });
 
-      // Rename a file
-      app.ports.renameFile.subscribe(function (params) {
-        window.go.main.App.Rename(params.oldName, params.newName)
+      // Rename multiple files
+      app.ports.renameFiles.subscribe(function (renamings) {
+        window.go.main.App.Rename(renamings)
         .then((result) =>
           {
-            app.ports.fileRenamed.send(result);
+            app.ports.filesRenamed.send(result);
           }
         ).catch(msg => {
           console.error(msg);

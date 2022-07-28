@@ -61,7 +61,10 @@ type FileInfo struct {
     PreviousName string
 }
 
-
+type Renaming struct {
+	OldName string
+	NewName string
+}
 
 func (a *App) GetCurrentDirectory() (string, error) {
 	return os.Getwd()
@@ -228,23 +231,30 @@ func (a *App) Move(sourceFiles []string, destinationDirectory string) ([]FileInf
 	return result, nil
 }
 
-func (a *App) Rename(oldName string, newName string) (FileInfo, error) {
-	err := os.Rename(oldName, newName)
-	if err != nil {
-		return FileInfo{}, err
+// Rename one or more files
+func (a *App) Rename(renamings []Renaming) ([]FileInfo, error) {
+	result := []FileInfo{}
+
+	for _, renaming := range renamings {
+		err := os.Rename(renaming.OldName, renaming.NewName)
+		if err != nil {
+			return result, err
+		}
+		info, err := os.Stat(renaming.NewName)
+		if err != nil {
+			return result, err
+		}
+		fileInfo := FileInfo{
+	        Name:    renaming.NewName,
+	        Size:    info.Size(),
+	        Mode:    info.Mode(),
+	        ModTime: info.ModTime(),
+	        IsDir:   info.IsDir(),
+	        PreviousName: renaming.OldName,
+	    }
+	    result = append(result, fileInfo)
 	}
-	info, err := os.Stat(newName)
-	if err != nil {
-		return FileInfo{}, err
-	}
-	result := FileInfo{
-        Name:    info.Name(),
-        Size:    info.Size(),
-        Mode:    info.Mode(),
-        ModTime: info.ModTime(),
-        IsDir:   info.IsDir(),
-        PreviousName: oldName,
-    }
+
 	return result, nil
 }
 

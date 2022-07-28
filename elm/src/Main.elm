@@ -61,8 +61,8 @@ type FocusedZone
 type alias Command =
     { operation : Operation
     , files : List FileInfo -- the files / dirs affected by the operation
-    , destination : Maybe String -- destination dir if any
-    , source : Maybe String -- source dir if any
+    , destination : Maybe String -- destination dir if any FIXME this is a bad design; try to create specific commands instead
+    , source : Maybe String -- source dir if any FIXME this is a bad design; try to create specific commands instead
     }
 
 
@@ -116,7 +116,7 @@ port openFile : String -> Cmd msg
 port removeFile : Json.Encode.Value -> Cmd msg
 
 
-port renameFile : Json.Encode.Value -> Cmd msg
+port renameFiles : List Json.Encode.Value -> Cmd msg
 
 
 port selectDestinationDirectory : String -> Cmd msg
@@ -129,7 +129,7 @@ port selectSourceDirectory : String -> Cmd msg
 -- INPUT PORTS
 
 
-port fileRenamed : (Json.Encode.Value -> msg) -> Sub msg
+port filesRenamed : (Json.Encode.Value -> msg) -> Sub msg
 
 
 port fileRemoved : (Json.Encode.Value -> msg) -> Sub msg
@@ -178,7 +178,7 @@ type alias Model =
     , sourceReplace : String
     , filteredDestinationSubdirectories : List FileInfo
     , filteredSourceDirectoryFiles : List FileInfo
-    , history : List Command
+    , history : List (List Command)
     , pathSeparator : String
     , focusedZone : FocusedZone
     , sourceDirectoryFiles : List FileInfo
@@ -223,6 +223,12 @@ init _ =
 -- UPDATE
 
 
+type alias Renaming =
+    { fileInfo : FileInfo
+    , originalPath : String
+    }
+
+
 type Msg
     = AdjustTimeZone Time.Zone
     | BackendReturnedCurrentDirPath String
@@ -232,7 +238,7 @@ type Msg
     | BackendReturnedError String
     | BackendReturnedMovedFiles (List FileInfo)
     | BackendReturnedRemovedFile FileInfo String
-    | BackendReturnedRenamedFile FileInfo String
+    | BackendReturnedRenamedFiles (List FileInfo) (List String)
     | BackendReturnedSourceDirectoryContent (List FileInfo)
     | BackendReturnedSourceDirectoryPath String
     | NoOp
@@ -266,7 +272,7 @@ type Target
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
-    case Debug.log "msg" msg of
+    case msg of
         AdjustTimeZone newZone ->
             ( { model | timezone = newZone }
             , Cmd.none
@@ -345,7 +351,7 @@ update msg model =
                     , source = Just model.sourceDirectoryPath
                     }
             in
-            ( { model | history = command :: model.history }
+            ( { model | history = [ command ] :: model.history }
             , Cmd.batch
                 [ getSourceDirectoryContent model.sourceDirectoryPath
                 , getDestinationDirectoryFiles model.destinationDirectoryPath
@@ -356,44 +362,39 @@ update msg model =
             -- TODO remove the unused params
             ( model, getSourceDirectoryContent model.sourceDirectoryPath )
 
-        BackendReturnedRenamedFile fileInfo originalPath ->
-            let
-                newFileInfo =
-                    { fileInfo | isSelected = True }
-
-                newPath =
-                    model.sourceDirectoryPath
-                        ++ model.pathSeparator
-                        ++ newFileInfo.name
-
-                command : Command
-                command =
-                    { operation = Rename
-                    , files = [ newFileInfo ]
-                    , destination = Just newPath
-                    , source = Just originalPath
-                    }
-            in
+        BackendReturnedRenamedFiles fileInfos originalPaths ->
             case model.editedFile of
                 Just editedFile ->
-                    let
-                        updatedSourceFiles =
-                            List.Extra.updateIf (\f -> f == editedFile) (\_ -> newFileInfo) model.sourceDirectoryFiles
-                    in
-                    ( { model
-                        | editedName = ""
-                        , editedFile = Nothing
-                        , history = command :: model.history
-                        , sourceDirectoryFiles = updatedSourceFiles
-                      }
-                        |> filterSourceFiles
-                    , Cmd.none
-                    )
+                    case List.head fileInfos of
+                        Just fileInfo ->
+                            editedFileWasRenamed model editedFile fileInfo
+
+                        Nothing ->
+                            ( { model | error = Just "Unexpected error: received empty fileInfos after renaming a file" }
+                            , Cmd.none
+                            )
 
                 Nothing ->
-                    -- TODO update the modified file or reload all
+                    let
+                        commands : List Command
+                        commands =
+                            List.map2
+                                (\fileInfo originalPath ->
+                                    let
+                                        newFileInfo =
+                                            { fileInfo | isSelected = True }
+                                    in
+                                    { operation = Rename
+                                    , files = [ newFileInfo ]
+                                    , destination = Just newFileInfo.name
+                                    , source = Just originalPath
+                                    }
+                                )
+                                fileInfos
+                                originalPaths
+                    in
                     ( { model
-                        | history = command :: model.history
+                        | history = commands :: model.history
                       }
                     , getSourceDirectoryContent model.sourceDirectoryPath
                     )
@@ -476,8 +477,14 @@ update msg model =
         UserValidatedFilename ->
             case model.editedFile of
                 Just fileInfo ->
+                    let
+                        renaming =
+                            { fileInfo = { fileInfo | name = model.editedName }
+                            , originalPath = fileInfo.name
+                            }
+                    in
                     ( model
-                    , applyRenaming model fileInfo.name model.editedName
+                    , applyRenaming model [ renaming ]
                     )
 
                 Nothing ->
@@ -543,26 +550,26 @@ update msg model =
 
         UserClickedReplaceButton ->
             let
-                ( oldNames, newNames ) =
+                renamings =
                     model
                         |> filterSourceFiles
                         |> .filteredSourceDirectoryFiles
                         |> List.filterMap (nameReplacement model.sourceSearch model.sourceReplace)
-                        |> List.unzip
             in
             ( { model | sourceReplace = "" }
-            , List.map2 (applyRenaming model) oldNames newNames
-                |> Cmd.batch
+            , applyRenaming model renamings
             )
 
 
-nameReplacement : String -> String -> FileInfo -> Maybe ( String, String )
+nameReplacement : String -> String -> FileInfo -> Maybe Renaming
 nameReplacement before after fileInfo =
     if String.contains before fileInfo.name then
         Just
-            ( fileInfo.name
-            , String.replace before after fileInfo.name
-            )
+            { fileInfo = { fileInfo | name = String.replace before after fileInfo.name }
+
+            -- TODO prepend with the source dir?
+            , originalPath = fileInfo.name
+            }
 
     else
         Nothing
@@ -671,6 +678,40 @@ renameSelectedFile model =
             ( model, Cmd.none )
 
 
+editedFileWasRenamed model editedFile fileInfo =
+    let
+        newFileInfo =
+            { fileInfo | isSelected = True }
+
+        newPath =
+            model.sourceDirectoryPath
+                ++ model.pathSeparator
+                ++ newFileInfo.name
+
+        command : Command
+        command =
+            { operation = Rename
+            , files = [ newFileInfo ]
+            , destination = Just newPath
+
+            -- editedFile.name: check this is the expected value
+            , source = Just editedFile.name
+            }
+
+        updatedSourceFiles =
+            List.Extra.updateIf (\f -> f == editedFile) (\_ -> newFileInfo) model.sourceDirectoryFiles
+    in
+    ( { model
+        | editedName = ""
+        , editedFile = Nothing
+        , history = [ command ] :: model.history
+        , sourceDirectoryFiles = updatedSourceFiles
+      }
+        |> filterSourceFiles
+    , Cmd.none
+    )
+
+
 prepareSelectedFilesForRemoval : Model -> ( Model, Cmd Msg )
 prepareSelectedFilesForRemoval model =
     ( { model
@@ -719,49 +760,61 @@ replace before after fileInfo =
     }
 
 
-applyRenaming : Model -> String -> String -> Cmd Msg
-applyRenaming model oldName newName =
+applyRenaming : Model -> List Renaming -> Cmd Msg
+applyRenaming model renamings =
     let
-        oldPath =
-            model.sourceDirectoryPath ++ model.pathSeparator ++ oldName
-
-        newPath =
-            model.sourceDirectoryPath ++ model.pathSeparator ++ newName
-
-        encodedValue =
-            Json.Encode.object
-                [ ( "oldName", Json.Encode.string oldPath )
-                , ( "newName", Json.Encode.string newPath )
-                ]
+        encodedRenamings =
+            renamings
+                |> List.map
+                    (\renaming ->
+                        Json.Encode.object
+                            [ ( "oldName"
+                              , model.sourceDirectoryPath
+                                    ++ model.pathSeparator
+                                    ++ renaming.originalPath
+                                    |> Json.Encode.string
+                              )
+                            , ( "newName"
+                              , model.sourceDirectoryPath
+                                    ++ model.pathSeparator
+                                    ++ renaming.fileInfo.name
+                                    |> Json.Encode.string
+                              )
+                            ]
+                    )
     in
-    renameFile encodedValue
+    renameFiles encodedRenamings
 
 
 cancel : Model -> ( Model, Cmd Msg )
 cancel model =
-    let
-        commandToCancel =
-            model.history
-                |> List.head
-    in
-    case commandToCancel of
-        Just command ->
-            case command.operation of
-                Move ->
-                    cancelMove command model
+    case List.head model.history of
+        Just commands ->
+            let
+                ( updatedModel, cmds ) =
+                    List.foldl
+                        (\command ( modelAcc, cmdAcc ) ->
+                            case command.operation of
+                                Move ->
+                                    cancelMove modelAcc cmdAcc command
 
-                Rename ->
-                    cancelRenaming command model
+                                Rename ->
+                                    cancelRenaming modelAcc cmdAcc command
 
-                Delete ->
-                    Debug.todo "Implement delete cancellation"
+                                Delete ->
+                                    Debug.todo "Implement delete cancellation"
+                        )
+                        ( model, [] )
+                        commands
+            in
+            ( updatedModel, Cmd.batch cmds )
 
         Nothing ->
             ( model, Cmd.none )
 
 
-cancelMove : Command -> Model -> ( Model, Cmd Msg )
-cancelMove command model =
+cancelMove : Model -> List (Cmd Msg) -> Command -> ( Model, List (Cmd Msg) )
+cancelMove model cmds command =
     let
         source =
             command.destination
@@ -776,12 +829,12 @@ cancelMove command model =
                 |> Maybe.withDefault ""
     in
     ( model
-    , moveFiles ( filesToMove, destination )
+    , moveFiles ( filesToMove, destination ) :: cmds
     )
 
 
-cancelRenaming : Command -> Model -> ( Model, Cmd Msg )
-cancelRenaming command model =
+cancelRenaming : Model -> List (Cmd Msg) -> Command -> ( Model, List (Cmd Msg) )
+cancelRenaming model cmds command =
     let
         oldName =
             command.destination |> Maybe.withDefault ""
@@ -796,7 +849,7 @@ cancelRenaming command model =
                 ]
     in
     ( { model | editedFile = List.head command.files }
-    , renameFile encodedValue
+    , renameFiles [ encodedValue ] :: cmds
     )
 
 
@@ -866,7 +919,7 @@ openSelectedFile model target =
     in
     case fileToOpen of
         Just fileInfo ->
-            ( model, openFile <| Debug.log "path" <| dirPath ++ model.pathSeparator ++ fileInfo.name )
+            ( model, openFile <| dirPath ++ model.pathSeparator ++ fileInfo.name )
 
         Nothing ->
             ( model, Cmd.none )
@@ -974,7 +1027,7 @@ subscriptions : Model -> Sub Msg
 subscriptions _ =
     Sub.batch
         [ fileRemoved (decodeFileInfo BackendReturnedRemovedFile)
-        , fileRenamed (decodeFileInfo BackendReturnedRenamedFile)
+        , filesRenamed (decodeRenamingList BackendReturnedRenamedFiles)
         , receiveCurrentDirectoryPath BackendReturnedCurrentDirPath
         , receiveSourceDirectoryContent (decodeFileInfoList BackendReturnedSourceDirectoryContent)
         , receiveDestinationDirectoryFiles (decodeFileInfoList BackendReturnedDestinationFiles)
@@ -986,13 +1039,36 @@ subscriptions _ =
         ]
 
 
+decodeRenamingList : (List FileInfo -> List String -> Msg) -> Json.Encode.Value -> Msg
+decodeRenamingList msg value =
+    let
+        decodedFileInfos : Result Json.Decode.Error (List FileInfo)
+        decodedFileInfos =
+            Json.Decode.decodeValue (list fileInfoDecoder) value
+
+        decodedOriginalPaths : Result Json.Decode.Error (List String)
+        decodedOriginalPaths =
+            Json.Decode.decodeValue (list <| Json.Decode.field "PreviousName" Json.Decode.string) value
+    in
+    case ( decodedFileInfos, decodedOriginalPaths ) of
+        ( Ok fileInfoList, Ok originalPaths ) ->
+            msg fileInfoList originalPaths
+
+        ( Err error, _ ) ->
+            BackendReturnedError (Json.Decode.errorToString error)
+
+        ( _, Err error ) ->
+            BackendReturnedError (Json.Decode.errorToString error)
+
+
 decodeFileInfoList : (List FileInfo -> Msg) -> Json.Encode.Value -> Msg
 decodeFileInfoList msg value =
     let
-        decodedList =
+        decodedFileInfos : Result Json.Decode.Error (List FileInfo)
+        decodedFileInfos =
             Json.Decode.decodeValue (list fileInfoDecoder) value
     in
-    case decodedList of
+    case decodedFileInfos of
         Ok fileInfoList ->
             msg fileInfoList
 
