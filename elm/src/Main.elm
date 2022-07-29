@@ -458,7 +458,10 @@ update msg model =
                 updatedSourceFiles =
                     List.Extra.updateIf ((==) fileInfo) (\_ -> newFileInfo) model.sourceDirectoryFiles
             in
-            ( { model | sourceDirectoryFiles = updatedSourceFiles }
+            ( { model
+                | sourceDirectoryFiles = updatedSourceFiles
+                , focusedZone = LeftSide
+              }
                 |> filterSourceFiles
             , Cmd.none
             )
