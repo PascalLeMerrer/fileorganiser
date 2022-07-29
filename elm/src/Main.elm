@@ -34,6 +34,7 @@ unixPathSep =
 
 
 type alias FileInfo =
+    -- TODO add the parent dir path as a property certainly would simplify the code and make it easier to change
     { isDir : Bool
     , mode : Int
     , modTime : Posix
@@ -179,6 +180,7 @@ type alias Model =
     , filteredDestinationSubdirectories : List FileInfo
     , filteredSourceDirectoryFiles : List FileInfo
     , history : List (List Command)
+    , isCanceling : Bool
     , pathSeparator : String
     , focusedZone : FocusedZone
     , sourceDirectoryFiles : List FileInfo
@@ -199,6 +201,7 @@ init _ =
       , editedName = ""
       , error = Nothing
       , filesToDelete = []
+      , isCanceling = False
       , sourceFilter = ""
       , sourceSearch = ""
       , sourceReplace = ""
@@ -342,62 +345,63 @@ update msg model =
                 )
 
         BackendReturnedMovedFiles fileInfos ->
-            let
-                command : Command
-                command =
-                    { operation = Move
-                    , files = fileInfos
-                    , destination = Just model.destinationDirectoryPath
-                    , source = Just model.sourceDirectoryPath
-                    }
-            in
-            ( { model | history = [ command ] :: model.history }
-            , Cmd.batch
-                [ getSourceDirectoryContent model.sourceDirectoryPath
-                , getDestinationDirectoryFiles model.destinationDirectoryPath
-                ]
-            )
+            if model.isCanceling then
+                ( model, Cmd.none )
+                -- don't add anything to history, this already was a canceling
+
+            else
+                let
+                    command : Command
+                    command =
+                        { operation = Move
+                        , files = fileInfos
+                        , destination = Just model.destinationDirectoryPath
+                        , source = Just model.sourceDirectoryPath
+                        }
+                in
+                ( { model | history = [ command ] :: model.history }
+                , Cmd.batch
+                    [ getSourceDirectoryContent model.sourceDirectoryPath
+                    , getDestinationDirectoryFiles model.destinationDirectoryPath
+                    ]
+                )
 
         BackendReturnedRemovedFile _ _ ->
             -- TODO remove the unused params
             ( model, getSourceDirectoryContent model.sourceDirectoryPath )
 
         BackendReturnedRenamedFiles fileInfos originalPaths ->
-            case model.editedFile of
-                Just editedFile ->
-                    case List.head fileInfos of
-                        Just fileInfo ->
-                            editedFileWasRenamed model editedFile fileInfo
+            let
+                commands : List Command
+                commands =
+                    List.map2
+                        (\fileInfo originalPath ->
+                            let
+                                newFileInfo =
+                                    { fileInfo | isSelected = True }
+                            in
+                            { operation = Rename
+                            , files = [ newFileInfo ]
+                            , destination = Just newFileInfo.name
+                            , source = Just originalPath
+                            }
+                        )
+                        fileInfos
+                        originalPaths
+            in
+            ( if model.isCanceling then
+                -- don't add anything to history, this already was a canceling
+                model
 
-                        Nothing ->
-                            ( { model | error = Just "Unexpected error: received empty fileInfos after renaming a file" }
-                            , Cmd.none
-                            )
-
-                Nothing ->
-                    let
-                        commands : List Command
-                        commands =
-                            List.map2
-                                (\fileInfo originalPath ->
-                                    let
-                                        newFileInfo =
-                                            { fileInfo | isSelected = True }
-                                    in
-                                    { operation = Rename
-                                    , files = [ newFileInfo ]
-                                    , destination = Just newFileInfo.name
-                                    , source = Just originalPath
-                                    }
-                                )
-                                fileInfos
-                                originalPaths
-                    in
-                    ( { model
-                        | history = commands :: model.history
-                      }
-                    , getSourceDirectoryContent model.sourceDirectoryPath
-                    )
+              else
+                { model
+                    | history = commands :: model.history
+                    , editedName = ""
+                    , editedFile = Nothing
+                    , focusedZone = LeftSide
+                }
+            , getSourceDirectoryContent model.sourceDirectoryPath
+            )
 
         BackendReturnedSourceDirectoryPath path ->
             if path == "" then
@@ -678,40 +682,6 @@ renameSelectedFile model =
             ( model, Cmd.none )
 
 
-editedFileWasRenamed model editedFile fileInfo =
-    let
-        newFileInfo =
-            { fileInfo | isSelected = True }
-
-        newPath =
-            model.sourceDirectoryPath
-                ++ model.pathSeparator
-                ++ newFileInfo.name
-
-        command : Command
-        command =
-            { operation = Rename
-            , files = [ newFileInfo ]
-            , destination = Just newPath
-
-            -- editedFile.name: check this is the expected value
-            , source = Just editedFile.name
-            }
-
-        updatedSourceFiles =
-            List.Extra.updateIf (\f -> f == editedFile) (\_ -> newFileInfo) model.sourceDirectoryFiles
-    in
-    ( { model
-        | editedName = ""
-        , editedFile = Nothing
-        , history = [ command ] :: model.history
-        , sourceDirectoryFiles = updatedSourceFiles
-      }
-        |> filterSourceFiles
-    , Cmd.none
-    )
-
-
 prepareSelectedFilesForRemoval : Model -> ( Model, Cmd Msg )
 prepareSelectedFilesForRemoval model =
     ( { model
@@ -807,7 +777,9 @@ cancel model =
                         ( model, [] )
                         commands
             in
-            ( updatedModel, Cmd.batch cmds )
+            ( { updatedModel | isCanceling = True }
+            , Cmd.batch cmds
+            )
 
         Nothing ->
             ( model, Cmd.none )
