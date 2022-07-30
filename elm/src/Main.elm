@@ -34,7 +34,6 @@ unixPathSep =
 
 
 type alias FileInfo =
-    -- TODO add the parent dir path as a property certainly would simplify the code and make it easier to change
     { isDir : Bool
     , isSelected : Bool
     , mode : Int
@@ -349,15 +348,34 @@ update msg model =
         BackendReturnedMovedFiles fileInfos ->
             ( if model.isUndoing then
                 -- don't add anything to history
-                model
+                { model | isUndoing = False }
 
               else
+                let
+                    firstMovedFile =
+                        List.head fileInfos
+
+                    destination =
+                        case firstMovedFile of
+                            Just fileInfo ->
+                                fileInfo.parentPath
+
+                            Nothing ->
+                                ""
+
+                    source =
+                        if destination == model.destinationDirectoryPath then
+                            model.sourceDirectoryPath
+
+                        else
+                            model.destinationDirectoryPath
+                in
                 { model
                     | history =
                         [ { operation = Move
                           , files = fileInfos
-                          , destination = Just model.destinationDirectoryPath
-                          , source = Just model.sourceDirectoryPath
+                          , destination = Just destination
+                          , source = Just source
                           }
                         ]
                             :: model.history
@@ -381,7 +399,7 @@ update msg model =
         BackendReturnedRenamedFiles fileInfos originalPaths ->
             ( if model.isUndoing then
                 -- don't add anything to history
-                model
+                { model | isUndoing = False }
 
               else
                 let
@@ -668,8 +686,8 @@ synchronizeFilters model =
         model
 
 
-moveSelectedSourceFiles : Model -> ( Model, Cmd Msg )
-moveSelectedSourceFiles model =
+moveSelectedFiles : Model -> ( Model, Cmd Msg )
+moveSelectedFiles model =
     let
         ( filesToMove, destination ) =
             case model.focusedZone of
@@ -829,8 +847,7 @@ undo model =
                         commands
             in
             ( { updatedModel
-                | isUndoing = True
-                , history = List.drop 1 model.history
+                | history = List.drop 1 model.history
               }
             , Cmd.batch cmds
             )
@@ -874,7 +891,10 @@ undoRenaming model cmds command =
                 , ( "newName", Json.Encode.string newName )
                 ]
     in
-    ( { model | editedFile = List.head command.files }
+    ( { model
+        | editedFile = List.head command.files
+        , isUndoing = True
+      }
     , renameFiles [ encodedValue ] :: cmds
     )
 
@@ -1014,7 +1034,7 @@ processMainShortcuts model target event =
             openSelectedFolder model target
 
         ( Key.M, False, False ) ->
-            moveSelectedSourceFiles model
+            moveSelectedFiles model
 
         ( Key.O, False, False ) ->
             openSelectedFile model target
