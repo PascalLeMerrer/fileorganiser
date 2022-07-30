@@ -36,10 +36,11 @@ unixPathSep =
 type alias FileInfo =
     -- TODO add the parent dir path as a property certainly would simplify the code and make it easier to change
     { isDir : Bool
+    , isSelected : Bool
     , mode : Int
     , modTime : Posix
     , name : String
-    , isSelected : Bool
+    , parentPath : String
     , size : Int
     }
 
@@ -71,10 +72,11 @@ fileInfoDecoder : Decoder FileInfo
 fileInfoDecoder =
     Json.Decode.succeed FileInfo
         |> required "IsDir" Json.Decode.bool
+        |> hardcoded False
         |> required "Mode" Json.Decode.int
         |> required "ModTime" Iso8601.decoder
         |> required "Name" Json.Decode.string
-        |> hardcoded False
+        |> required "DirPath" Json.Decode.string
         |> required "Size" Json.Decode.int
 
 
@@ -180,7 +182,7 @@ type alias Model =
     , filteredDestinationSubdirectories : List FileInfo
     , filteredSourceDirectoryFiles : List FileInfo
     , history : List (List Command)
-    , isCanceling : Bool
+    , isUndoing : Bool
     , pathSeparator : String
     , focusedZone : FocusedZone
     , sourceDirectoryFiles : List FileInfo
@@ -201,7 +203,7 @@ init _ =
       , editedName = ""
       , error = Nothing
       , filesToDelete = []
-      , isCanceling = False
+      , isUndoing = False
       , sourceFilter = ""
       , sourceSearch = ""
       , sourceReplace = ""
@@ -275,7 +277,7 @@ type Target
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
-    case msg of
+    case Debug.log "msg" msg of
         AdjustTimeZone newZone ->
             ( { model | timezone = newZone }
             , Cmd.none
@@ -345,31 +347,31 @@ update msg model =
                 )
 
         BackendReturnedMovedFiles fileInfos ->
-            if model.isCanceling then
-                ( model, Cmd.none )
-                -- don't add anything to history, this already was a canceling
+            ( if model.isUndoing then
+                -- don't add anything to history
+                model
 
-            else
-                let
-                    command : Command
-                    command =
-                        { operation = Move
-                        , files = fileInfos
-                        , destination = Just model.destinationDirectoryPath
-                        , source = Just model.sourceDirectoryPath
-                        }
-                in
-                ( { model | history = [ command ] :: model.history }
-                , Cmd.batch
-                    [ getSourceDirectoryContent model.sourceDirectoryPath
-                    , getDestinationDirectoryFiles model.destinationDirectoryPath
-                    ]
-                )
+              else
+                { model
+                    | history =
+                        [ { operation = Move
+                          , files = fileInfos
+                          , destination = Just model.destinationDirectoryPath
+                          , source = Just model.sourceDirectoryPath
+                          }
+                        ]
+                            :: model.history
+                }
+            , Cmd.batch
+                [ getSourceDirectoryContent model.sourceDirectoryPath
+                , getDestinationDirectoryFiles model.destinationDirectoryPath
+                ]
+            )
 
         BackendReturnedRemovedFile _ _ ->
             -- TODO remove the unused params
             ( model
-              -- TODO reload only the modified content
+              -- TODO reload only the modified content if possible
             , Cmd.batch
                 [ getSourceDirectoryContent model.sourceDirectoryPath
                 , getDestinationDirectoryFiles model.destinationDirectoryPath
@@ -377,29 +379,29 @@ update msg model =
             )
 
         BackendReturnedRenamedFiles fileInfos originalPaths ->
-            let
-                commands : List Command
-                commands =
-                    List.map2
-                        (\fileInfo originalPath ->
-                            let
-                                newFileInfo =
-                                    { fileInfo | isSelected = True }
-                            in
-                            { operation = Rename
-                            , files = [ newFileInfo ]
-                            , destination = Just newFileInfo.name
-                            , source = Just originalPath
-                            }
-                        )
-                        fileInfos
-                        originalPaths
-            in
-            ( if model.isCanceling then
-                -- don't add anything to history, this already was a canceling
+            ( if model.isUndoing then
+                -- don't add anything to history
                 model
 
               else
+                let
+                    commands : List Command
+                    commands =
+                        List.map2
+                            (\fileInfo originalPath ->
+                                let
+                                    newFileInfo =
+                                        { fileInfo | isSelected = True }
+                                in
+                                { operation = Rename
+                                , files = [ newFileInfo ]
+                                , destination = Just (newFileInfo.parentPath ++ model.pathSeparator ++ newFileInfo.name)
+                                , source = Just originalPath
+                                }
+                            )
+                            fileInfos
+                            originalPaths
+                in
                 { model
                     | history = commands :: model.history
                     , editedName = ""
@@ -420,7 +422,13 @@ update msg model =
                 )
 
         UserPressedKey target event ->
-            processKeyboardShortcut model target event
+            if model.isUndoing then
+                -- ignore key presses while an undoing is being performed
+                -- it could mess with the history
+                ( model, Cmd.none )
+
+            else
+                processKeyboardShortcut model target event
 
         NoOp ->
             ( model, Cmd.none )
@@ -525,10 +533,10 @@ update msg model =
                 newSourcePath =
                     case fileInfo.name of
                         ".." ->
-                            parentDir model model.sourceDirectoryPath
+                            fileInfo.parentPath
 
                         _ ->
-                            model.sourceDirectoryPath ++ model.pathSeparator ++ fileInfo.name
+                            fileInfo.parentPath ++ model.pathSeparator ++ fileInfo.name
             in
             ( { model | sourceDirectoryPath = newSourcePath }
             , getSourceDirectoryContent newSourcePath
@@ -663,14 +671,24 @@ synchronizeFilters model =
 moveSelectedSourceFiles : Model -> ( Model, Cmd Msg )
 moveSelectedSourceFiles model =
     let
-        filesToMove : List String
-        filesToMove =
-            model.filteredSourceDirectoryFiles
-                |> List.filter .isSelected
-                |> List.map (\fileinfo -> model.sourceDirectoryPath ++ model.pathSeparator ++ fileinfo.name)
+        ( filesToMove, destination ) =
+            case model.focusedZone of
+                RightSide ->
+                    ( model.destinationDirectoryFiles
+                        |> List.filter .isSelected
+                        |> List.map (\fileinfo -> fileinfo.parentPath ++ model.pathSeparator ++ fileinfo.name)
+                    , model.sourceDirectoryPath
+                    )
+
+                _ ->
+                    ( model.filteredSourceDirectoryFiles
+                        |> List.filter .isSelected
+                        |> List.map (\fileinfo -> fileinfo.parentPath ++ model.pathSeparator ++ fileinfo.name)
+                    , model.destinationDirectoryPath
+                    )
     in
     ( model
-    , moveFiles ( filesToMove, model.destinationDirectoryPath )
+    , moveFiles ( filesToMove, destination )
     )
 
 
@@ -772,13 +790,13 @@ applyRenaming model renamings =
                     (\renaming ->
                         Json.Encode.object
                             [ ( "oldName"
-                              , model.sourceDirectoryPath
+                              , renaming.fileInfo.parentPath
                                     ++ model.pathSeparator
                                     ++ renaming.originalPath
                                     |> Json.Encode.string
                               )
                             , ( "newName"
-                              , model.sourceDirectoryPath
+                              , renaming.fileInfo.parentPath
                                     ++ model.pathSeparator
                                     ++ renaming.fileInfo.name
                                     |> Json.Encode.string
@@ -789,8 +807,8 @@ applyRenaming model renamings =
     renameFiles encodedRenamings
 
 
-cancel : Model -> ( Model, Cmd Msg )
-cancel model =
+undo : Model -> ( Model, Cmd Msg )
+undo model =
     case List.head model.history of
         Just commands ->
             let
@@ -799,10 +817,10 @@ cancel model =
                         (\command ( modelAcc, cmdAcc ) ->
                             case command.operation of
                                 Move ->
-                                    cancelMove modelAcc cmdAcc command
+                                    undoMove modelAcc cmdAcc command
 
                                 Rename ->
-                                    cancelRenaming modelAcc cmdAcc command
+                                    undoRenaming modelAcc cmdAcc command
 
                                 Delete ->
                                     Debug.todo "Implement delete cancellation"
@@ -810,7 +828,10 @@ cancel model =
                         ( model, [] )
                         commands
             in
-            ( { updatedModel | isCanceling = True }
+            ( { updatedModel
+                | isUndoing = True
+                , history = List.drop 1 model.history
+              }
             , Cmd.batch cmds
             )
 
@@ -818,8 +839,8 @@ cancel model =
             ( model, Cmd.none )
 
 
-cancelMove : Model -> List (Cmd Msg) -> Command -> ( Model, List (Cmd Msg) )
-cancelMove model cmds command =
+undoMove : Model -> List (Cmd Msg) -> Command -> ( Model, List (Cmd Msg) )
+undoMove model cmds command =
     let
         source =
             command.destination
@@ -833,13 +854,13 @@ cancelMove model cmds command =
             command.source
                 |> Maybe.withDefault ""
     in
-    ( model
+    ( { model | isUndoing = True }
     , moveFiles ( filesToMove, destination ) :: cmds
     )
 
 
-cancelRenaming : Model -> List (Cmd Msg) -> Command -> ( Model, List (Cmd Msg) )
-cancelRenaming model cmds command =
+undoRenaming : Model -> List (Cmd Msg) -> Command -> ( Model, List (Cmd Msg) )
+undoRenaming model cmds command =
     let
         oldName =
             command.destination |> Maybe.withDefault ""
@@ -908,23 +929,19 @@ reload model target =
 openSelectedFile : Model -> Target -> ( Model, Cmd Msg )
 openSelectedFile model target =
     let
-        ( fileToOpen, dirPath ) =
+        fileToOpen =
             case target of
                 Source ->
-                    ( model.filteredSourceDirectoryFiles
+                    model.filteredSourceDirectoryFiles
                         |> List.Extra.find .isSelected
-                    , model.sourceDirectoryPath
-                    )
 
                 Destination ->
-                    ( model.destinationDirectoryFiles
+                    model.destinationDirectoryFiles
                         |> List.Extra.find .isSelected
-                    , model.destinationDirectoryPath
-                    )
     in
     case fileToOpen of
         Just fileInfo ->
-            ( model, openFile <| dirPath ++ model.pathSeparator ++ fileInfo.name )
+            ( model, openFile <| fileInfo.parentPath ++ model.pathSeparator ++ fileInfo.name )
 
         Nothing ->
             ( model, Cmd.none )
@@ -1012,13 +1029,13 @@ processMainShortcuts model target event =
             prepareSelectedFilesForRemoval model
 
         ( Key.U, False, False ) ->
-            cancel model
+            undo model
 
         ( Key.Z, True, False ) ->
-            cancel model
+            undo model
 
         ( Key.Z, False, True ) ->
-            cancel model
+            undo model
 
         _ ->
             ( model, Cmd.none )
@@ -1173,7 +1190,6 @@ viewLeftSide model =
                     case model.focusedZone of
                         LeftSide ->
                             [ Events.preventDefaultOn "keydown" (keyDecoder Source)
-                            , class "focused"
                             ]
 
                         _ ->
@@ -1248,7 +1264,7 @@ viewSourceSubdirectories model =
                 |> Maybe.withDefault "Error: cannot get current dir name"
     in
     div [ class "panel" ]
-        [ div [ class "panel-header" ]
+        [ div [ class <| "panel-header" ++ additionalHeaderClass model LeftSide ]
             [ h2 [] [ text <| "Source directory: " ++ currentDirName ]
             , span []
                 [ button
@@ -1272,6 +1288,14 @@ viewSourceSubdirectories model =
         ]
 
 
+additionalHeaderClass model zone =
+    if model.focusedZone == zone then
+        " focused"
+
+    else
+        ""
+
+
 viewDestinationSubdirectories : Model -> Html Msg
 viewDestinationSubdirectories model =
     let
@@ -1281,7 +1305,7 @@ viewDestinationSubdirectories model =
                 |> Maybe.withDefault "Error: cannot get current dir name"
     in
     div [ class "panel" ]
-        [ div [ class "panel-header" ]
+        [ div [ class <| "panel-header" ++ additionalHeaderClass model RightSide ]
             [ h2 [] [ text <| "Destination directory: " ++ currentDirName ]
             , span []
                 [ button
@@ -1328,7 +1352,7 @@ viewSourceFiles model =
                 ""
     in
     div [ class "panel" ]
-        [ div [ class "panel-header" ]
+        [ div [ class <| "panel-header" ++ additionalHeaderClass model LeftSide ]
             [ h2 [] [ text "Source Files" ]
             , input
                 [ class "input"
@@ -1366,7 +1390,7 @@ viewSourceFiles model =
 viewDestinationFiles : Model -> Html Msg
 viewDestinationFiles model =
     div [ class "panel" ]
-        [ div [ class "panel-header" ]
+        [ div [ class <| "panel-header" ++ additionalHeaderClass model RightSide ]
             [ h2 [] [ text "Destination Files" ]
             ]
         , div
@@ -1547,23 +1571,21 @@ viewFooter model =
 viewFocusedZone : Model -> Html Msg
 viewFocusedZone model =
     text <|
-        "focused zone "
-            ++ (case model.focusedZone of
-                    Confirmation ->
-                        "Confirmation | "
+        case model.focusedZone of
+            Confirmation ->
+                "Confirmation | "
 
-                    Filtering ->
-                        "Filtering | "
+            Filtering ->
+                "Filtering | "
 
-                    LeftSide ->
-                        "LeftSide | "
+            LeftSide ->
+                "LeftSide | "
 
-                    NameEditor ->
-                        "NameEditor | "
+            NameEditor ->
+                "NameEditor | "
 
-                    RightSide ->
-                        "RightSide | "
+            RightSide ->
+                "RightSide | "
 
-                    SourceSearchReplace ->
-                        "SourceSearchReplace | "
-               )
+            SourceSearchReplace ->
+                "SourceSearchReplace | "

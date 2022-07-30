@@ -1,5 +1,6 @@
 :root {
   --main-color: rgb(98, 189, 176);
+  --faded-main-color: rgba(98, 189, 176, 0.59);
 }
 
 html {
@@ -230,10 +231,14 @@ footer {
   height:  20px;
   min-height:  20px;
   padding: 5px;
-  background-color: var(--main-color);
+  background-color: var(--faded-main-color);
   display: flex;
   flex-direction: row;
   justify-content: space-between;
+}
+
+.panel-header.focused {
+  background-color: var(--main-color);
 }
 
 
@@ -256,8 +261,4 @@ footer {
 
 .btn.link {
   margin:  0 15px 0 15px;
-}
-
-.focused {
-  border: 1px solid red;
 }

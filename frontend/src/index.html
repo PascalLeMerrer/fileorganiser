@@ -98,6 +98,7 @@
       app.ports.moveFiles.subscribe(function (params) {
         let sourceFiles = params[0];
         let directoryName = params[1];
+        console.log("move", params);
         window.go.main.App.Move(sourceFiles, directoryName)
         .then((result) =>
           {

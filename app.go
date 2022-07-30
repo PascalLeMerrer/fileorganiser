@@ -54,6 +54,7 @@ func NewError(message error) *SerialisableError {
 
 type FileInfo struct {
     Name    string
+    DirPath string
     Size    int64
     Mode    os.FileMode
     ModTime time.Time
@@ -101,6 +102,7 @@ func (a *App) GetDirectoryContent(dirName string) ([]FileInfo, error) {
 
         f := FileInfo{
             Name:    entry.Name(),
+            DirPath: dirName,
             Size:    entry.Size(),
             Mode:    entry.Mode(),
             ModTime: entry.ModTime(),
@@ -137,6 +139,7 @@ func (a *App) GetDirectoryFiles(dirName string) ([]FileInfo, error) {
 
         f := FileInfo{
             Name:    entry.Name(),
+            DirPath: dirName,
             Size:    entry.Size(),
             Mode:    entry.Mode(),
             ModTime: entry.ModTime(),
@@ -168,6 +171,7 @@ func (a *App) GetSubdirectoriesRecursively(dirName string) ([]FileInfo, error) {
 	    	if info.IsDir() && ! isHidden {
 		        f := FileInfo{
 		            Name:    relativePath,
+		            DirPath: dirName,
 		            Size:    info.Size(),
 		            Mode:    info.Mode(),
 		            ModTime: info.ModTime(),
@@ -190,6 +194,7 @@ func getParentDirectory(absolutePath string) (FileInfo, error) {
 
 	f := FileInfo{
         Name:    "..",
+        DirPath: parentDir,
         Size:    info.Size(),
         Mode:    info.Mode(),
         ModTime: info.ModTime(),
@@ -221,6 +226,7 @@ func (a *App) Move(sourceFiles []string, destinationDirectory string) ([]FileInf
 		}
 		f := FileInfo{
             Name:    info.Name(),
+            DirPath: destinationDirectory,
             Size:    info.Size(),
             Mode:    info.Mode(),
             ModTime: info.ModTime(),
@@ -245,7 +251,8 @@ func (a *App) Rename(renamings []Renaming) ([]FileInfo, error) {
 			return result, err
 		}
 		fileInfo := FileInfo{
-	        Name:    renaming.NewName,
+	        Name:    info.Name(),
+	        DirPath: filepath.Dir(renaming.NewName),
 	        Size:    info.Size(),
 	        Mode:    info.Mode(),
 	        ModTime: info.ModTime(),
@@ -265,6 +272,7 @@ func (a *App) Remove(filePath string) (FileInfo, error) {
 	}
 	fileInfo := FileInfo{
         Name:    info.Name(),
+        DirPath: filepath.Dir(filePath),
         Size:    info.Size(),
         Mode:    info.Mode(),
         ModTime: info.ModTime(),
