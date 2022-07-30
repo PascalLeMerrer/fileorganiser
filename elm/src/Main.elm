@@ -368,7 +368,13 @@ update msg model =
 
         BackendReturnedRemovedFile _ _ ->
             -- TODO remove the unused params
-            ( model, getSourceDirectoryContent model.sourceDirectoryPath )
+            ( model
+              -- TODO reload only the modified content
+            , Cmd.batch
+                [ getSourceDirectoryContent model.sourceDirectoryPath
+                , getDestinationDirectoryFiles model.destinationDirectoryPath
+                ]
+            )
 
         BackendReturnedRenamedFiles fileInfos originalPaths ->
             let
@@ -687,18 +693,42 @@ renameSelectedFile model =
 
 prepareSelectedFilesForRemoval : Model -> ( Model, Cmd Msg )
 prepareSelectedFilesForRemoval model =
-    ( { model
-        | filesToDelete =
-            model.filteredSourceDirectoryFiles
-                |> List.filter .isSelected
-        , focusedZone = Confirmation
-      }
-    , Cmd.none
-    )
+    case model.focusedZone of
+        LeftSide ->
+            ( { model
+                | filesToDelete =
+                    model.filteredSourceDirectoryFiles
+                        |> List.filter .isSelected
+                , focusedZone = Confirmation
+              }
+            , Cmd.none
+            )
+
+        RightSide ->
+            ( { model
+                | filesToDelete =
+                    model.destinationDirectoryFiles
+                        |> List.filter .isSelected
+                , focusedZone = Confirmation
+              }
+            , Cmd.none
+            )
+
+        _ ->
+            ( model, Cmd.none )
 
 
 removeSelectedFiles : Model -> ( Model, Cmd Msg )
 removeSelectedFiles model =
+    let
+        dirPath =
+            case model.focusedZone of
+                RightSide ->
+                    model.sourceDirectoryPath
+
+                _ ->
+                    model.destinationDirectoryPath
+    in
     ( { model
         | filesToDelete = []
         , focusedZone = LeftSide
@@ -708,7 +738,7 @@ removeSelectedFiles model =
             (\fileInfo ->
                 removeFile <|
                     Json.Encode.string <|
-                        model.sourceDirectoryPath
+                        dirPath
                             ++ model.pathSeparator
                             ++ fileInfo.name
             )
@@ -1143,6 +1173,7 @@ viewLeftSide model =
                     case model.focusedZone of
                         LeftSide ->
                             [ Events.preventDefaultOn "keydown" (keyDecoder Source)
+                            , class "focused"
                             ]
 
                         _ ->
@@ -1516,7 +1547,7 @@ viewFooter model =
 viewFocusedZone : Model -> Html Msg
 viewFocusedZone model =
     text <|
-        "focused zone"
+        "focused zone "
             ++ (case model.focusedZone of
                     Confirmation ->
                         "Confirmation | "
