@@ -40,6 +40,7 @@ type alias File =
     , modTime : Posix
     , name : String
     , parentPath : String
+    , satisfiesFilter : Bool
     , size : Int
     , status : FileStatus
     }
@@ -61,6 +62,7 @@ fileDecoder =
         |> required "ModTime" Iso8601.decoder
         |> required "Name" Json.Decode.string
         |> required "DirPath" Json.Decode.string
+        |> hardcoded False
         |> required "Size" Json.Decode.int
         |> hardcoded Unselected
 
@@ -188,7 +190,6 @@ type alias Model =
     , sourceSearch : String
     , sourceReplace : String
     , filteredDestinationSubdirectories : List File
-    , filteredSourceDirectoryFiles : List File
     , history : List (List Command)
     , isUndoing : Bool
     , pathSeparator : String
@@ -216,7 +217,6 @@ init _ =
       , sourceSearch = ""
       , sourceReplace = ""
       , filteredDestinationSubdirectories = []
-      , filteredSourceDirectoryFiles = []
       , history = []
       , pathSeparator = unixPathSep
       , focusedZone = LeftSide
@@ -599,9 +599,7 @@ update msg model =
         UserClickedReplaceButton ->
             let
                 renamings =
-                    model
-                        |> filterSourceFiles
-                        |> .filteredSourceDirectoryFiles
+                    model.sourceDirectoryFiles
                         |> List.filterMap (nameReplacement model.sourceSearch model.sourceReplace)
             in
             ( { model | sourceReplace = "" }
@@ -611,7 +609,7 @@ update msg model =
 
 nameReplacement : String -> String -> File -> Maybe Renaming
 nameReplacement before after file =
-    if String.contains before file.name then
+    if file.satisfiesFilter && String.contains before file.name then
         Just
             { file = { file | name = String.replace before after file.name }
 
@@ -643,13 +641,13 @@ filterSourceFiles model =
     case words of
         [] ->
             { model
-                | filteredSourceDirectoryFiles = model.sourceDirectoryFiles
+                | sourceDirectoryFiles = List.map (\f -> { f | satisfiesFilter = True }) model.sourceDirectoryFiles
             }
 
         _ ->
             { model
-                | filteredSourceDirectoryFiles =
-                    List.filter (filterByName words) model.sourceDirectoryFiles
+                | sourceDirectoryFiles =
+                    List.map (\f -> { f | satisfiesFilter = filterByName words f }) model.sourceDirectoryFiles
             }
 
 
@@ -662,12 +660,12 @@ filterDestinationDirectories model =
     case words of
         [] ->
             { model
-                | filteredDestinationSubdirectories = model.destinationSubdirectories
+                | destinationSubdirectories = List.map (\f -> { f | satisfiesFilter = True }) model.destinationSubdirectories
             }
 
         _ ->
             { model
-                | filteredDestinationSubdirectories =
+                | destinationSubdirectories =
                     List.filter (filterByName words) model.destinationSubdirectories
             }
 
@@ -708,8 +706,8 @@ moveSelectedFiles model =
                     )
 
                 _ ->
-                    ( model.filteredSourceDirectoryFiles
-                        |> List.filter .isSelected
+                    ( model.sourceDirectoryFiles
+                        |> List.filter (\f -> f.satisfiesFilter && f.isSelected)
                         |> List.map (\fileinfo -> fileinfo.parentPath ++ model.pathSeparator ++ fileinfo.name)
                     , model.destinationDirectoryPath
                     )
@@ -724,8 +722,8 @@ renameSelectedFile model =
     let
         fileToEdit =
             -- TODO allow renaming destination files
-            model.filteredSourceDirectoryFiles
-                |> List.Extra.find .isSelected
+            model.sourceDirectoryFiles
+                |> List.Extra.find (\f -> f.satisfiesFilter && f.isSelected)
     in
     case fileToEdit of
         Just file ->
@@ -749,8 +747,8 @@ prepareSelectedFilesForRemoval model =
         LeftSide ->
             ( { model
                 | filesToDelete =
-                    model.filteredSourceDirectoryFiles
-                        |> List.filter .isSelected
+                    model.sourceDirectoryFiles
+                        |> List.filter (\f -> f.satisfiesFilter && f.isSelected)
                 , focusedZone = Confirmation
               }
                 |> changeStatusOfSelectedSourceFiles SelectedForDeletion
@@ -778,7 +776,7 @@ changeStatusOfSelectedSourceFiles fileStatus model =
         | sourceDirectoryFiles =
             List.map
                 (\file ->
-                    if file.isSelected then
+                    if file.satisfiesFilter && file.isSelected then
                         { file | status = fileStatus }
 
                     else
@@ -836,7 +834,7 @@ removeSelectedFiles model =
 replaceInSourceFilenames : Model -> ( Model, Cmd Msg )
 replaceInSourceFilenames model =
     ( { model
-        | filteredSourceDirectoryFiles =
+        | sourceDirectoryFiles =
             List.map (replace model.sourceSearch model.sourceReplace) model.sourceDirectoryFiles
       }
     , Cmd.none
@@ -1003,8 +1001,8 @@ openSelectedFile model target =
         fileToOpen =
             case target of
                 Source ->
-                    model.filteredSourceDirectoryFiles
-                        |> List.Extra.find .isSelected
+                    model.sourceDirectoryFiles
+                        |> List.Extra.find (\f -> f.satisfiesFilter && f.isSelected)
 
                 Destination ->
                     model.destinationDirectoryFiles
@@ -1451,7 +1449,8 @@ viewSourceFiles model =
             ]
         , div
             [ class "panel-content" ]
-            (model.filteredSourceDirectoryFiles
+            (model.sourceDirectoryFiles
+                |> List.filter .satisfiesFilter
                 |> List.sortBy (.name >> String.toLower)
                 |> List.map (viewFileInfo model UserClickedSourceFile toHighlight)
             )
