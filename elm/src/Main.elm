@@ -35,7 +35,6 @@ unixPathSep =
 
 type alias File =
     { isDir : Bool
-    , isSelected : Bool
     , mode : Int
     , modTime : Posix
     , name : String
@@ -57,7 +56,6 @@ fileDecoder : Decoder File
 fileDecoder =
     Json.Decode.succeed File
         |> required "IsDir" Json.Decode.bool
-        |> hardcoded False
         |> required "Mode" Json.Decode.int
         |> required "ModTime" Iso8601.decoder
         |> required "Name" Json.Decode.string
@@ -189,6 +187,8 @@ type alias Model =
     , sourceFilter : String
     , sourceSearch : String
     , sourceReplace : String
+
+    -- TODO remove
     , filteredDestinationSubdirectories : List File
     , history : List (List Command)
     , isUndoing : Bool
@@ -418,7 +418,7 @@ update msg model =
                             (\file originalPath ->
                                 let
                                     newFileInfo =
-                                        { file | isSelected = True }
+                                        { file | status = Selected }
                                 in
                                 { operation = Rename
                                 , files = [ newFileInfo ]
@@ -434,6 +434,16 @@ update msg model =
                     , editedName = ""
                     , editedFile = Nothing
                     , focusedZone = LeftSide
+                    , sourceDirectoryFiles =
+                        List.map
+                            (\f ->
+                                if f.status == Edited then
+                                    { f | status = Selected }
+
+                                else
+                                    f
+                            )
+                            model.sourceDirectoryFiles
                 }
             , getSourceDirectoryContent model.sourceDirectoryPath
             )
@@ -494,7 +504,7 @@ update msg model =
         UserClickedSourceFile file ->
             let
                 newFileInfo =
-                    { file | isSelected = not file.isSelected }
+                    file |> toggleSelectionStatus
 
                 updatedSourceFiles =
                     List.Extra.updateIf ((==) file) (\_ -> newFileInfo) model.sourceDirectoryFiles
@@ -510,7 +520,7 @@ update msg model =
         UserClickedDestinationFile file ->
             let
                 newFileInfo =
-                    { file | isSelected = not file.isSelected }
+                    file |> toggleSelectionStatus
 
                 updatedDestinationFiles =
                     List.Extra.updateIf ((==) file) (\_ -> newFileInfo) model.destinationDirectoryFiles
@@ -576,7 +586,20 @@ update msg model =
             removeSelectedFiles model
 
         UserClickedCancel ->
-            ( { model | filesToDelete = [], focusedZone = LeftSide }
+            let
+                unselectForDeletion file =
+                    if file.status == SelectedForDeletion then
+                        { file | status = Selected }
+
+                    else
+                        file
+            in
+            ( { model
+                | filesToDelete = []
+                , focusedZone = LeftSide
+                , sourceDirectoryFiles = List.map unselectForDeletion model.sourceDirectoryFiles
+                , destinationDirectoryFiles = List.map unselectForDeletion model.destinationDirectoryFiles
+              }
             , Cmd.none
             )
 
@@ -605,6 +628,23 @@ update msg model =
             ( { model | sourceReplace = "" }
             , applyRenaming model renamings
             )
+
+
+toggleSelectionStatus : File -> File
+toggleSelectionStatus file =
+    case file.status of
+        Selected ->
+            { file | status = Unselected }
+
+        Unselected ->
+            { file | status = Selected }
+
+        Edited ->
+            file
+
+        SelectedForDeletion ->
+            -- TODO  Remove the list of files selected for deletion
+            { file | status = Selected }
 
 
 nameReplacement : String -> String -> File -> Maybe Renaming
@@ -700,14 +740,14 @@ moveSelectedFiles model =
             case model.focusedZone of
                 RightSide ->
                     ( model.destinationDirectoryFiles
-                        |> List.filter .isSelected
+                        |> List.filter (\f -> f.status == Selected)
                         |> List.map (\fileinfo -> fileinfo.parentPath ++ model.pathSeparator ++ fileinfo.name)
                     , model.sourceDirectoryPath
                     )
 
                 _ ->
                     ( model.sourceDirectoryFiles
-                        |> List.filter (\f -> f.satisfiesFilter && f.isSelected)
+                        |> List.filter (\f -> f.satisfiesFilter && f.status == Selected)
                         |> List.map (\fileinfo -> fileinfo.parentPath ++ model.pathSeparator ++ fileinfo.name)
                     , model.destinationDirectoryPath
                     )
@@ -723,17 +763,16 @@ renameSelectedFile model =
         fileToEdit =
             -- TODO allow renaming destination files
             model.sourceDirectoryFiles
-                |> List.Extra.find (\f -> f.satisfiesFilter && f.isSelected)
+                |> List.Extra.find (\f -> f.satisfiesFilter && f.status == Selected)
     in
     case fileToEdit of
         Just file ->
-            -- TODO change status of the edited file
-            --let
-            --  model.filteredSourceDirectoryFiles
-            --    |> List.Extra.updateIf (\f -> f == file) (\f -> {f | status = Edited})
-            --
-            --in
-            ( { model | editedFile = Just file, editedName = file.name }
+            let
+                sourceDirectoryFiles =
+                    model.sourceDirectoryFiles
+                        |> List.Extra.updateIf (\f -> f == file) (\f -> { f | status = Edited })
+            in
+            ( { model | editedFile = Just file, editedName = file.name, sourceDirectoryFiles = sourceDirectoryFiles }
             , Cmd.none
             )
 
@@ -748,7 +787,7 @@ prepareSelectedFilesForRemoval model =
             ( { model
                 | filesToDelete =
                     model.sourceDirectoryFiles
-                        |> List.filter (\f -> f.satisfiesFilter && f.isSelected)
+                        |> List.filter (\f -> f.satisfiesFilter && f.status == Selected)
                 , focusedZone = Confirmation
               }
                 |> changeStatusOfSelectedSourceFiles SelectedForDeletion
@@ -759,7 +798,7 @@ prepareSelectedFilesForRemoval model =
             ( { model
                 | filesToDelete =
                     model.destinationDirectoryFiles
-                        |> List.filter .isSelected
+                        |> List.filter (\f -> f.status == Selected)
                 , focusedZone = Confirmation
               }
                 |> changeStatusOfSelectedDestinationFiles SelectedForDeletion
@@ -776,7 +815,7 @@ changeStatusOfSelectedSourceFiles fileStatus model =
         | sourceDirectoryFiles =
             List.map
                 (\file ->
-                    if file.satisfiesFilter && file.isSelected then
+                    if file.satisfiesFilter && file.status == Selected then
                         { file | status = fileStatus }
 
                     else
@@ -793,7 +832,7 @@ changeStatusOfSelectedDestinationFiles fileStatus model =
         | destinationDirectoryFiles =
             List.map
                 (\file ->
-                    if file.isSelected then
+                    if file.status == Selected then
                         { file | status = fileStatus }
 
                     else
@@ -953,10 +992,16 @@ selectAllFiles model target =
     case target of
         Source ->
             let
-                -- TODO should we select filtered files only?
                 updatedFiles =
                     model.sourceDirectoryFiles
-                        |> List.map (\f -> { f | isSelected = True })
+                        |> List.map
+                            (\f ->
+                                if f.satisfiesFilter then
+                                    { f | status = Selected }
+
+                                else
+                                    f
+                            )
             in
             ( { model
                 | sourceDirectoryFiles = updatedFiles
@@ -969,7 +1014,14 @@ selectAllFiles model target =
             let
                 updatedFiles =
                     model.destinationDirectoryFiles
-                        |> List.map (\f -> { f | isSelected = True })
+                        |> List.map
+                            (\f ->
+                                if f.satisfiesFilter then
+                                    { f | status = Selected }
+
+                                else
+                                    f
+                            )
             in
             ( { model
                 | destinationDirectoryFiles = updatedFiles
@@ -1002,11 +1054,11 @@ openSelectedFile model target =
             case target of
                 Source ->
                     model.sourceDirectoryFiles
-                        |> List.Extra.find (\f -> f.satisfiesFilter && f.isSelected)
+                        |> List.Extra.find (\f -> f.satisfiesFilter && f.status == Selected)
 
                 Destination ->
                     model.destinationDirectoryFiles
-                        |> List.Extra.find .isSelected
+                        |> List.Extra.find (\f -> f.status == Selected)
     in
     case fileToOpen of
         Just file ->
@@ -1499,11 +1551,18 @@ viewReadOnlyFile : Model -> (File -> Msg) -> String -> File -> Html Msg
 viewReadOnlyFile model onClickMsg highlighted file =
     let
         className =
-            if file.isSelected then
-                "filename selected"
+            case file.status of
+                Selected ->
+                    "filename selected"
 
-            else
-                "filename"
+                Unselected ->
+                    "filename"
+
+                Edited ->
+                    "filename"
+
+                SelectedForDeletion ->
+                    "filename marked-for-deletion"
 
         fileName =
             case highlighted of
