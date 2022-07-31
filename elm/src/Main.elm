@@ -30,7 +30,7 @@ unixPathSep =
 
 
 
-{- Maps Golang FileInfo -}
+{- Maps Golang File -}
 
 
 type alias File =
@@ -413,12 +413,12 @@ update msg model =
                         List.map2
                             (\file originalPath ->
                                 let
-                                    newFileInfo =
+                                    newFile =
                                         { file | status = Selected }
                                 in
                                 { operation = Rename
-                                , files = [ newFileInfo ]
-                                , destination = Just (newFileInfo.parentPath ++ model.pathSeparator ++ newFileInfo.name)
+                                , files = [ newFile ]
+                                , destination = Just (newFile.parentPath ++ model.pathSeparator ++ newFile.name)
                                 , source = Just originalPath
                                 }
                             )
@@ -499,11 +499,11 @@ update msg model =
 
         UserClickedSourceFile file ->
             let
-                newFileInfo =
+                newFile =
                     file |> toggleSelectionStatus
 
                 updatedSourceFiles =
-                    List.Extra.updateIf ((==) file) (\_ -> newFileInfo) model.sourceDirectoryFiles
+                    List.Extra.updateIf ((==) file) (\_ -> newFile) model.sourceDirectoryFiles
             in
             ( { model
                 | sourceDirectoryFiles = updatedSourceFiles
@@ -515,11 +515,11 @@ update msg model =
 
         UserClickedDestinationFile file ->
             let
-                newFileInfo =
+                newFile =
                     file |> toggleSelectionStatus
 
                 updatedDestinationFiles =
-                    List.Extra.updateIf ((==) file) (\_ -> newFileInfo) model.destinationDirectoryFiles
+                    List.Extra.updateIf ((==) file) (\_ -> newFile) model.destinationDirectoryFiles
             in
             ( { model | destinationDirectoryFiles = updatedDestinationFiles }
             , Cmd.none
@@ -529,8 +529,12 @@ update msg model =
             ( { model | editedName = newName }, Cmd.none )
 
         UserValidatedFilename ->
-            case model.editedFile of
-                Just file ->
+            let
+                isConflicting =
+                    List.any (\f -> f.name == model.editedName) model.sourceDirectoryFiles
+            in
+            case ( model.editedFile, isConflicting ) of
+                ( Just file, False ) ->
                     let
                         renaming =
                             { file = { file | name = model.editedName }
@@ -541,7 +545,12 @@ update msg model =
                     , applyRenaming model [ renaming ]
                     )
 
-                Nothing ->
+                ( Just file, True ) ->
+                    ( { model | error = Just ("A file with the name " ++ file.name ++ " already exists in the source directory") }
+                    , Cmd.none
+                    )
+
+                ( Nothing, _ ) ->
                     ( model, Cmd.none )
 
         UserClickedDestinationDirectory file ->
@@ -737,14 +746,14 @@ moveSelectedFiles model =
                 RightSide ->
                     ( model.destinationDirectoryFiles
                         |> List.filter (\f -> f.status == Selected)
-                        |> List.map (\fileinfo -> fileinfo.parentPath ++ model.pathSeparator ++ fileinfo.name)
+                        |> List.map (\file -> file.parentPath ++ model.pathSeparator ++ file.name)
                     , model.sourceDirectoryPath
                     )
 
                 _ ->
                     ( model.sourceDirectoryFiles
                         |> List.filter (\f -> f.satisfiesFilter && f.status == Selected)
-                        |> List.map (\fileinfo -> fileinfo.parentPath ++ model.pathSeparator ++ fileinfo.name)
+                        |> List.map (\file -> file.parentPath ++ model.pathSeparator ++ file.name)
                     , model.destinationDirectoryPath
                     )
     in
@@ -753,22 +762,29 @@ moveSelectedFiles model =
     )
 
 
-renameSelectedFile : Model -> ( Model, Cmd Msg )
-renameSelectedFile model =
+
+-- TODO allow renaming destination files
+
+
+renameSelectedSourceFile : Model -> ( Model, Cmd Msg )
+renameSelectedSourceFile model =
     let
         fileToEdit =
-            -- TODO allow renaming destination files
             model.sourceDirectoryFiles
                 |> List.Extra.find (\f -> f.satisfiesFilter && f.status == Selected)
     in
-    case fileToEdit of
+    case Debug.log "fileToEdit" fileToEdit of
         Just file ->
             let
                 sourceDirectoryFiles =
                     model.sourceDirectoryFiles
                         |> List.Extra.updateIf (\f -> f == file) (\f -> { f | status = Edited })
             in
-            ( { model | editedFile = Just file, editedName = file.name, sourceDirectoryFiles = sourceDirectoryFiles }
+            ( { model
+                | editedFile = Just file
+                , editedName = file.name
+                , sourceDirectoryFiles = List.Extra.updateIf (\f -> f == file) (\f -> { f | status = Edited }) sourceDirectoryFiles
+              }
             , Cmd.none
             )
 
@@ -1113,7 +1129,7 @@ processMainShortcuts : Model -> Target -> KeyboardEvent -> ( Model, Cmd Msg )
 processMainShortcuts model target event =
     case ( event.keyCode, event.ctrlKey, event.metaKey ) of
         ( Key.F2, False, False ) ->
-            renameSelectedFile model
+            renameSelectedSourceFile model
 
         ( Key.F5, False, False ) ->
             reload model target
@@ -1137,7 +1153,7 @@ processMainShortcuts model target event =
             openSelectedFile model target
 
         ( Key.R, False, False ) ->
-            renameSelectedFile model
+            renameSelectedSourceFile model
 
         ( Key.R, True, False ) ->
             reload model target
@@ -1165,31 +1181,31 @@ processMainShortcuts model target event =
 subscriptions : Model -> Sub Msg
 subscriptions _ =
     Sub.batch
-        [ fileRemoved (decodeFileInfo BackendReturnedRemovedFile)
+        [ fileRemoved (decodeFile BackendReturnedRemovedFile)
         , filesRenamed (decodeRenamingList BackendReturnedRenamedFiles)
         , receiveCurrentDirectoryPath BackendReturnedCurrentDirPath
-        , receiveSourceDirectoryContent (decodeFileInfoList BackendReturnedSourceDirectoryContent)
-        , receiveDestinationDirectoryFiles (decodeFileInfoList BackendReturnedDestinationFiles)
+        , receiveSourceDirectoryContent (decodeFileList BackendReturnedSourceDirectoryContent)
+        , receiveDestinationDirectoryFiles (decodeFileList BackendReturnedDestinationFiles)
         , receiveError BackendReturnedError
-        , receiveMovedFiles (decodeFileInfoList BackendReturnedMovedFiles)
+        , receiveMovedFiles (decodeFileList BackendReturnedMovedFiles)
         , receiveSelectedDestinationDirectory BackendReturnedDestinationDirectoryPath
         , receiveSelectedSourceDirectory BackendReturnedSourceDirectoryPath
-        , receiveSubDirectories (decodeFileInfoList BackendReturnedDestinationDirectories)
+        , receiveSubDirectories (decodeFileList BackendReturnedDestinationDirectories)
         ]
 
 
 decodeRenamingList : (List File -> List String -> Msg) -> Json.Encode.Value -> Msg
 decodeRenamingList msg value =
     let
-        decodedFileInfos : Result Json.Decode.Error (List File)
-        decodedFileInfos =
+        decodedFiles : Result Json.Decode.Error (List File)
+        decodedFiles =
             Json.Decode.decodeValue (list fileDecoder) value
 
         decodedOriginalPaths : Result Json.Decode.Error (List String)
         decodedOriginalPaths =
             Json.Decode.decodeValue (list <| Json.Decode.field "PreviousName" Json.Decode.string) value
     in
-    case ( decodedFileInfos, decodedOriginalPaths ) of
+    case ( decodedFiles, decodedOriginalPaths ) of
         ( Ok fileList, Ok originalPaths ) ->
             msg fileList originalPaths
 
@@ -1200,14 +1216,14 @@ decodeRenamingList msg value =
             BackendReturnedError (Json.Decode.errorToString error)
 
 
-decodeFileInfoList : (List File -> Msg) -> Json.Encode.Value -> Msg
-decodeFileInfoList msg value =
+decodeFileList : (List File -> Msg) -> Json.Encode.Value -> Msg
+decodeFileList msg value =
     let
-        decodedFileInfos : Result Json.Decode.Error (List File)
-        decodedFileInfos =
+        decodedFiles : Result Json.Decode.Error (List File)
+        decodedFiles =
             Json.Decode.decodeValue (list fileDecoder) value
     in
-    case decodedFileInfos of
+    case decodedFiles of
         Ok fileList ->
             msg fileList
 
@@ -1215,16 +1231,16 @@ decodeFileInfoList msg value =
             BackendReturnedError (Json.Decode.errorToString error)
 
 
-decodeFileInfo : (File -> String -> Msg) -> Json.Encode.Value -> Msg
-decodeFileInfo msg value =
+decodeFile : (File -> String -> Msg) -> Json.Encode.Value -> Msg
+decodeFile msg value =
     let
-        decodedFileInfo =
+        decodedFile =
             Json.Decode.decodeValue fileDecoder value
 
         decodedPreviousName =
             Json.Decode.decodeValue (Json.Decode.field "PreviousName" Json.Decode.string) value
     in
-    case ( decodedFileInfo, decodedPreviousName ) of
+    case ( decodedFile, decodedPreviousName ) of
         ( Ok file, Ok previousName ) ->
             msg file previousName
 
@@ -1450,7 +1466,7 @@ viewDestinationSubdirectories model =
 viewDirectory : Model -> (File -> Msg) -> File -> Html Msg
 viewDirectory _ onClickMsg file =
     div
-        [ class "fileinfo dir"
+        [ class "file dir"
         , onClick (onClickMsg file)
         ]
         [ text <| file.name ]
@@ -1501,7 +1517,7 @@ viewSourceFiles model =
             (model.sourceDirectoryFiles
                 |> List.filter .satisfiesFilter
                 |> List.sortBy (.name >> String.toLower)
-                |> List.map (viewFileInfo model UserClickedSourceFile toHighlight)
+                |> List.map (viewFile model UserClickedSourceFile toHighlight)
             )
         ]
 
@@ -1517,18 +1533,18 @@ viewDestinationFiles model =
             (model.destinationDirectoryFiles
                 |> List.sortBy (.name >> String.toLower)
                 -- TODO pass search filter as last param
-                |> List.map (viewFileInfo model UserClickedDestinationFile "")
+                |> List.map (viewFile model UserClickedDestinationFile "")
             )
         ]
 
 
-viewFileInfo : Model -> (File -> Msg) -> String -> File -> Html Msg
-viewFileInfo model onClickMsg highlighted file =
+viewFile : Model -> (File -> Msg) -> String -> File -> Html Msg
+viewFile model onClickMsg highlighted file =
     let
         isEdited =
             case model.editedFile of
-                Just someFileInfo ->
-                    file == someFileInfo
+                Just someFile ->
+                    file == someFile
 
                 Nothing ->
                     False
@@ -1570,7 +1586,7 @@ viewReadOnlyFile model onClickMsg highlighted file =
                     highlight highlighted file.name
     in
     div
-        [ class "fileinfo"
+        [ class "file"
         , onClick (onClickMsg file)
         ]
         [ div [ class className ] fileName
@@ -1584,7 +1600,7 @@ viewEditedFilename model =
     form [ onSubmit UserValidatedFilename ]
         [ input
             [ autofocus True
-            , class "fileinfo-input"
+            , class "file-input"
             , onInput UserModifiedFileName
             , onFocus (UserChangedFocusedZone NameEditor)
             , value model.editedName
