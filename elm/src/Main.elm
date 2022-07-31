@@ -41,7 +41,28 @@ type alias FileInfo =
     , name : String
     , parentPath : String
     , size : Int
+    , status : FileStatus
     }
+
+
+type FileStatus
+    = Unselected
+    | Edited
+    | Selected
+    | SelectedForDeletion
+
+
+fileInfoDecoder : Decoder FileInfo
+fileInfoDecoder =
+    Json.Decode.succeed FileInfo
+        |> required "IsDir" Json.Decode.bool
+        |> hardcoded False
+        |> required "Mode" Json.Decode.int
+        |> required "ModTime" Iso8601.decoder
+        |> required "Name" Json.Decode.string
+        |> required "DirPath" Json.Decode.string
+        |> required "Size" Json.Decode.int
+        |> hardcoded Unselected
 
 
 type Operation
@@ -65,18 +86,6 @@ type alias Command =
     , destination : Maybe String -- destination dir if any FIXME this is a bad design; try to create specific commands instead
     , source : Maybe String -- source dir if any FIXME this is a bad design; try to create specific commands instead
     }
-
-
-fileInfoDecoder : Decoder FileInfo
-fileInfoDecoder =
-    Json.Decode.succeed FileInfo
-        |> required "IsDir" Json.Decode.bool
-        |> hardcoded False
-        |> required "Mode" Json.Decode.int
-        |> required "ModTime" Iso8601.decoder
-        |> required "Name" Json.Decode.string
-        |> required "DirPath" Json.Decode.string
-        |> required "Size" Json.Decode.int
 
 
 
@@ -714,11 +723,18 @@ renameSelectedFile : Model -> ( Model, Cmd Msg )
 renameSelectedFile model =
     let
         fileToEdit =
+            -- TODO allow renaming destination files
             model.filteredSourceDirectoryFiles
                 |> List.Extra.find .isSelected
     in
     case fileToEdit of
         Just fileInfo ->
+            -- TODO change status of the edited file
+            --let
+            --  model.filteredSourceDirectoryFiles
+            --    |> List.Extra.updateIf (\f -> f == fileInfo) (\f -> {f | status = Edited})
+            --
+            --in
             ( { model | editedFile = Just fileInfo, editedName = fileInfo.name }
             , Cmd.none
             )
@@ -737,6 +753,7 @@ prepareSelectedFilesForRemoval model =
                         |> List.filter .isSelected
                 , focusedZone = Confirmation
               }
+                |> changeStatusOfSelectedSourceFiles SelectedForDeletion
             , Cmd.none
             )
 
@@ -747,11 +764,45 @@ prepareSelectedFilesForRemoval model =
                         |> List.filter .isSelected
                 , focusedZone = Confirmation
               }
+                |> changeStatusOfSelectedDestinationFiles SelectedForDeletion
             , Cmd.none
             )
 
         _ ->
             ( model, Cmd.none )
+
+
+changeStatusOfSelectedSourceFiles : FileStatus -> Model -> Model
+changeStatusOfSelectedSourceFiles fileStatus model =
+    { model
+        | sourceDirectoryFiles =
+            List.map
+                (\fileInfo ->
+                    if fileInfo.isSelected then
+                        { fileInfo | status = fileStatus }
+
+                    else
+                        fileInfo
+                )
+                model.sourceDirectoryFiles
+    }
+        |> filterSourceFiles
+
+
+changeStatusOfSelectedDestinationFiles : FileStatus -> Model -> Model
+changeStatusOfSelectedDestinationFiles fileStatus model =
+    { model
+        | destinationDirectoryFiles =
+            List.map
+                (\fileInfo ->
+                    if fileInfo.isSelected then
+                        { fileInfo | status = fileStatus }
+
+                    else
+                        fileInfo
+                )
+                model.destinationDirectoryFiles
+    }
 
 
 removeSelectedFiles : Model -> ( Model, Cmd Msg )
