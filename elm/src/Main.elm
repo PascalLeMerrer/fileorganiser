@@ -187,9 +187,6 @@ type alias Model =
     , sourceFilter : String
     , sourceSearch : String
     , sourceReplace : String
-
-    -- TODO remove
-    , filteredDestinationSubdirectories : List File
     , history : List (List Command)
     , isUndoing : Bool
     , pathSeparator : String
@@ -216,7 +213,6 @@ init _ =
       , sourceFilter = ""
       , sourceSearch = ""
       , sourceReplace = ""
-      , filteredDestinationSubdirectories = []
       , history = []
       , pathSeparator = unixPathSep
       , focusedZone = LeftSide
@@ -706,7 +702,7 @@ filterDestinationDirectories model =
         _ ->
             { model
                 | destinationSubdirectories =
-                    List.filter (filterByName words) model.destinationSubdirectories
+                    List.map (\f -> { f | satisfiesFilter = filterByName words f }) model.destinationSubdirectories
             }
 
 
@@ -1443,7 +1439,8 @@ viewDestinationSubdirectories model =
             ]
         , div
             [ class "panel-content" ]
-            (model.filteredDestinationSubdirectories
+            (model.destinationSubdirectories
+                |> List.filter .satisfiesFilter
                 |> List.sortBy (.name >> String.toLower)
                 |> List.map (viewDirectory model UserClickedDestinationDirectory)
             )
