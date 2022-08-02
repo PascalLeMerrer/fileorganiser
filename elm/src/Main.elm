@@ -1,6 +1,7 @@
 port module Main exposing (..)
 
 import Browser
+import Browser.Dom
 import Filesize
 import Html exposing (Html, button, div, footer, form, h2, header, input, span, text)
 import Html.Attributes exposing (autofocus, class, disabled, id, placeholder, tabindex, type_, value)
@@ -541,12 +542,12 @@ update msg model =
                             , originalPath = file.name
                             }
                     in
-                    ( model
+                    ( { model | error = Nothing }
                     , applyRenaming model [ renaming ]
                     )
 
                 ( Just file, True ) ->
-                    ( { model | error = Just ("A file with the name " ++ file.name ++ " already exists in the source directory") }
+                    ( { model | error = Just ("A file with the name " ++ model.editedName ++ " already exists in the source directory") }
                     , Cmd.none
                     )
 
@@ -779,17 +780,25 @@ renameSelectedSourceFile model =
                 sourceDirectoryFiles =
                     model.sourceDirectoryFiles
                         |> List.Extra.updateIf (\f -> f == file) (\f -> { f | status = Edited })
+                        |> Debug.log "sourceDirectoryFiles"
             in
             ( { model
                 | editedFile = Just file
                 , editedName = file.name
-                , sourceDirectoryFiles = List.Extra.updateIf (\f -> f == file) (\f -> { f | status = Edited }) sourceDirectoryFiles
+                , sourceDirectoryFiles = sourceDirectoryFiles
               }
-            , Cmd.none
+            , focusOn "filename-input" NoOp
             )
 
         Nothing ->
             ( model, Cmd.none )
+
+
+{-| Sets focus on an HTML element, then sends a msg when done (even if the element is not found)
+-}
+focusOn : String -> msg -> Cmd msg
+focusOn elementId msg =
+    Browser.Dom.focus elementId |> Task.attempt (\_ -> msg)
 
 
 prepareSelectedFilesForRemoval : Model -> ( Model, Cmd Msg )
@@ -992,8 +1001,7 @@ undoRenaming model cmds command =
                 ]
     in
     ( { model
-        | editedFile = List.head command.files
-        , isUndoing = True
+        | isUndoing = True
       }
     , renameFiles [ encodedValue ] :: cmds
     )
@@ -1318,16 +1326,14 @@ viewLeftSide : Model -> Html Msg
 viewLeftSide model =
     let
         conditionalAttributes =
-            case model.editedFile of
-                Nothing ->
-                    case model.focusedZone of
-                        LeftSide ->
-                            [ Events.preventDefaultOn "keydown" (keyDecoder Source)
-                            ]
+            case ( model.editedFile, model.focusedZone ) of
+                ( Nothing, LeftSide ) ->
+                    [ Events.preventDefaultOn "keydown" (keyDecoder Source)
+                    ]
 
-                        _ ->
-                            [ onFocus (UserChangedFocusedZone LeftSide)
-                            ]
+                ( Nothing, _ ) ->
+                    [ onFocus (UserChangedFocusedZone LeftSide)
+                    ]
 
                 _ ->
                     []
@@ -1484,10 +1490,13 @@ viewSourceFiles model =
 
             else
                 ""
+
+        count =
+            List.length model.sourceDirectoryFiles |> String.fromInt
     in
     div [ class "panel" ]
         [ div [ class <| "panel-header" ++ additionalHeaderClass model LeftSide ]
-            [ h2 [] [ text "Source Files" ]
+            [ h2 [] [ text <| count ++ " files in source directory" ]
             , input
                 [ class "input"
                 , onFocus (UserChangedFocusedZone SourceSearchReplace)
@@ -1524,9 +1533,13 @@ viewSourceFiles model =
 
 viewDestinationFiles : Model -> Html Msg
 viewDestinationFiles model =
+    let
+        count =
+            List.length model.sourceDirectoryFiles |> String.fromInt
+    in
     div [ class "panel" ]
         [ div [ class <| "panel-header" ++ additionalHeaderClass model RightSide ]
-            [ h2 [] [ text "Destination Files" ]
+            [ h2 [] [ text <| count ++ " files in destination directory" ]
             ]
         , div
             [ class "panel-content" ]
@@ -1540,16 +1553,7 @@ viewDestinationFiles model =
 
 viewFile : Model -> (File -> Msg) -> String -> File -> Html Msg
 viewFile model onClickMsg highlighted file =
-    let
-        isEdited =
-            case model.editedFile of
-                Just someFile ->
-                    file == someFile
-
-                Nothing ->
-                    False
-    in
-    if isEdited then
+    if file.status == Edited then
         viewEditedFilename model
 
     else
@@ -1599,8 +1603,8 @@ viewEditedFilename : Model -> Html Msg
 viewEditedFilename model =
     form [ onSubmit UserValidatedFilename ]
         [ input
-            [ autofocus True
-            , class "file-input"
+            [ class "file-input"
+            , id "filename-input"
             , onInput UserModifiedFileName
             , onFocus (UserChangedFocusedZone NameEditor)
             , value model.editedName
