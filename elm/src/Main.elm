@@ -4,7 +4,7 @@ import Browser
 import Browser.Dom
 import Filesize
 import Html exposing (Html, button, div, footer, form, h2, header, input, span, text)
-import Html.Attributes exposing (autofocus, class, disabled, id, placeholder, tabindex, type_, value)
+import Html.Attributes exposing (class, disabled, id, placeholder, tabindex, type_, value)
 import Html.Events as Events exposing (onClick, onFocus, onInput, onSubmit)
 import Iso8601
 import Json.Decode exposing (Decoder, list)
@@ -546,7 +546,7 @@ update msg model =
                     , applyRenaming model [ renaming ]
                     )
 
-                ( Just file, True ) ->
+                ( Just _, True ) ->
                     ( { model | error = Just ("A file with the name " ++ model.editedName ++ " already exists in the source directory") }
                     , Cmd.none
                     )
@@ -619,8 +619,9 @@ update msg model =
             )
 
         UserChangedSourceReplace replaceString ->
-            { model | sourceReplace = replaceString }
-                |> replaceInSourceFilenames
+            ( { model | sourceReplace = replaceString }
+            , Cmd.none
+            )
 
         UserChangedSourceSearch searchString ->
             ( { model | sourceSearch = searchString }, Cmd.none )
@@ -889,23 +890,6 @@ removeSelectedFiles model =
             )
         |> Cmd.batch
     )
-
-
-replaceInSourceFilenames : Model -> ( Model, Cmd Msg )
-replaceInSourceFilenames model =
-    ( { model
-        | sourceDirectoryFiles =
-            List.map (replace model.sourceSearch model.sourceReplace) model.sourceDirectoryFiles
-      }
-    , Cmd.none
-    )
-
-
-replace : String -> String -> File -> File
-replace before after file =
-    { file
-        | name = String.replace before after file.name
-    }
 
 
 applyRenaming : Model -> List Renaming -> Cmd Msg
@@ -1481,16 +1465,6 @@ viewDirectory _ onClickMsg file =
 viewSourceFiles : Model -> Html Msg
 viewSourceFiles model =
     let
-        toHighlight =
-            if model.sourceReplace /= "" then
-                model.sourceReplace
-
-            else if model.sourceSearch /= "" then
-                model.sourceSearch
-
-            else
-                ""
-
         count =
             List.length model.sourceDirectoryFiles |> String.fromInt
     in
@@ -1526,7 +1500,7 @@ viewSourceFiles model =
             (model.sourceDirectoryFiles
                 |> List.filter .satisfiesFilter
                 |> List.sortBy (.name >> String.toLower)
-                |> List.map (viewFile model UserClickedSourceFile toHighlight)
+                |> List.map (viewFile model UserClickedSourceFile True)
             )
         ]
 
@@ -1545,27 +1519,27 @@ viewDestinationFiles model =
             [ class "panel-content" ]
             (model.destinationDirectoryFiles
                 |> List.sortBy (.name >> String.toLower)
-                -- TODO pass search filter as last param
-                |> List.map (viewFile model UserClickedDestinationFile "")
+                |> List.map (viewFile model UserClickedDestinationFile False)
             )
         ]
 
 
-viewFile : Model -> (File -> Msg) -> String -> File -> Html Msg
-viewFile model onClickMsg highlighted file =
+viewFile : Model -> (File -> Msg) -> Bool -> File -> Html Msg
+viewFile model onClickMsg canBeSearchedAndReplaced file =
     if file.status == Edited then
         viewEditedFilename model
 
     else
-        viewReadOnlyFile model onClickMsg highlighted file
+        viewReadOnlyFile model onClickMsg canBeSearchedAndReplaced file
 
 
+highlight : String -> String -> List (Html Msg)
 highlight =
     Mark.markWith { defaultOptions | minTermLength = 1 }
 
 
-viewReadOnlyFile : Model -> (File -> Msg) -> String -> File -> Html Msg
-viewReadOnlyFile model onClickMsg highlighted file =
+viewReadOnlyFile : Model -> (File -> Msg) -> Bool -> File -> Html Msg
+viewReadOnlyFile model onClickMsg canBeSearchedAndReplaced file =
     let
         className =
             case file.status of
@@ -1582,12 +1556,21 @@ viewReadOnlyFile model onClickMsg highlighted file =
                     "filename marked-for-deletion"
 
         fileName =
-            case highlighted of
-                "" ->
-                    [ text file.name ]
+            if canBeSearchedAndReplaced then
+                case ( model.sourceSearch, model.sourceReplace ) of
+                    ( "", _ ) ->
+                        [ text file.name ]
 
-                _ ->
-                    highlight highlighted file.name
+                    ( searchedString, "" ) ->
+                        highlight searchedString file.name
+
+                    ( searchedString, replacementString ) ->
+                        file.name
+                            |> String.replace searchedString replacementString
+                            |> highlight replacementString
+
+            else
+                [ text file.name ]
     in
     div
         [ class "file"
