@@ -991,8 +991,8 @@ undoRenaming model cmds command =
     )
 
 
-selectAllFiles : Model -> Target -> ( Model, Cmd Msg )
-selectAllFiles model target =
+changeAllFileStatus : Model -> Target -> FileStatus -> ( Model, Cmd Msg )
+changeAllFileStatus model target status =
     case target of
         Source ->
             let
@@ -1001,7 +1001,7 @@ selectAllFiles model target =
                         |> List.map
                             (\f ->
                                 if f.satisfiesFilter then
-                                    { f | status = Selected }
+                                    { f | status = status }
 
                                 else
                                     f
@@ -1019,13 +1019,7 @@ selectAllFiles model target =
                 updatedFiles =
                     model.destinationDirectoryFiles
                         |> List.map
-                            (\f ->
-                                if f.satisfiesFilter then
-                                    { f | status = Selected }
-
-                                else
-                                    f
-                            )
+                            (\f -> { f | status = status })
             in
             ( { model
                 | destinationDirectoryFiles = updatedFiles
@@ -1119,51 +1113,54 @@ processConfirmationShortcuts model event =
 
 processMainShortcuts : Model -> Target -> KeyboardEvent -> ( Model, Cmd Msg )
 processMainShortcuts model target event =
-    case ( event.keyCode, event.ctrlKey, event.metaKey ) of
-        ( Key.F2, False, False ) ->
-            renameSelectedSourceFile model
+    if event.ctrlKey || event.metaKey then
+        case ( event.keyCode, event.shiftKey ) of
+            ( Key.A, False ) ->
+                changeAllFileStatus model target Selected
 
-        ( Key.F5, False, False ) ->
-            reload model target
+            ( Key.A, True ) ->
+                changeAllFileStatus model target Unselected
 
-        ( Key.A, True, False ) ->
-            selectAllFiles model target
+            ( Key.Backspace, False ) ->
+                prepareSelectedFilesForRemoval model
 
-        ( Key.A, False, True ) ->
-            selectAllFiles model target
+            ( Key.R, False ) ->
+                reload model target
 
-        ( Key.Backspace, False, True ) ->
-            prepareSelectedFilesForRemoval model
+            ( Key.Z, False ) ->
+                undo model
 
-        ( Key.F, False, False ) ->
-            openSelectedFolder model target
+            _ ->
+                ( model, Cmd.none )
 
-        ( Key.M, False, False ) ->
-            moveSelectedFiles model
+    else
+        case ( event.keyCode, event.shiftKey ) of
+            ( Key.F2, False ) ->
+                renameSelectedSourceFile model
 
-        ( Key.O, False, False ) ->
-            openSelectedFile model target
+            ( Key.F5, False ) ->
+                reload model target
 
-        ( Key.R, False, False ) ->
-            renameSelectedSourceFile model
+            ( Key.F, False ) ->
+                openSelectedFolder model target
 
-        ( Key.R, True, False ) ->
-            reload model target
+            ( Key.M, False ) ->
+                moveSelectedFiles model
 
-        ( Key.Delete, False, False ) ->
-            prepareSelectedFilesForRemoval model
+            ( Key.O, False ) ->
+                openSelectedFile model target
 
-        ( Key.U, False, False ) ->
-            undo model
+            ( Key.R, False ) ->
+                renameSelectedSourceFile model
 
-        ( Key.Z, True, False ) ->
-            undo model
+            ( Key.Delete, False ) ->
+                prepareSelectedFilesForRemoval model
 
-        ( Key.Z, False, True ) ->
-            undo model
+            ( Key.U, False ) ->
+                undo model
 
-        _ ->
-            ( model, Cmd.none )
+            _ ->
+                ( model, Cmd.none )
 
 
 
