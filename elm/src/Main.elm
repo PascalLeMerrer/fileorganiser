@@ -1468,29 +1468,31 @@ viewSourceFiles model =
     div [ class "panel" ]
         [ div [ class <| "panel-header" ++ additionalHeaderClass model LeftSide ]
             [ h2 [] [ text <| count ++ " files in source directory" ]
-            , input
-                [ class "input"
-                , onFocus (UserChangedFocusedZone SourceSearchReplace)
-                , onInput UserChangedSourceSearch
-                , placeholder "Search"
-                , type_ "text"
-                , value model.sourceSearch
+            , div [ class "search-form" ]
+                [ input
+                    [ class "input"
+                    , onFocus (UserChangedFocusedZone SourceSearchReplace)
+                    , onInput UserChangedSourceSearch
+                    , placeholder "Search"
+                    , type_ "text"
+                    , value model.sourceSearch
+                    ]
+                    []
+                , input
+                    [ class "input"
+                    , onFocus (UserChangedFocusedZone SourceSearchReplace)
+                    , onInput UserChangedSourceReplace
+                    , placeholder "Replace with"
+                    , type_ "text"
+                    , value model.sourceReplace
+                    ]
+                    []
+                , button
+                    [ class "btn"
+                    , onClick UserClickedReplaceButton
+                    ]
+                    [ text "Replace" ]
                 ]
-                []
-            , input
-                [ class "input"
-                , onFocus (UserChangedFocusedZone SourceSearchReplace)
-                , onInput UserChangedSourceReplace
-                , placeholder "Replace with"
-                , type_ "text"
-                , value model.sourceReplace
-                ]
-                []
-            , button
-                [ class "btn"
-                , onClick UserClickedReplaceButton
-                ]
-                [ text "Replace" ]
             ]
         , div
             [ class "panel-content" ]
