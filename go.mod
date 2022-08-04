@@ -4,7 +4,7 @@ go 1.17
 
 require (
 	github.com/skratchdot/open-golang v0.0.0-20200116055534-eef842397966
-	github.com/wailsapp/wails/v2 v2.0.0-beta.38
+	github.com/wailsapp/wails/v2 v2.0.0-beta.42
 )
 
 require (
