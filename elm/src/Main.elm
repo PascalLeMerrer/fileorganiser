@@ -1508,7 +1508,7 @@ viewDestinationFiles : Model -> Html Msg
 viewDestinationFiles model =
     let
         count =
-            List.length model.sourceDirectoryFiles |> String.fromInt
+            List.length model.destinationDirectoryFiles |> String.fromInt
     in
     div [ class "panel" ]
         [ div [ class <| "panel-header" ++ additionalHeaderClass model RightSide ]
