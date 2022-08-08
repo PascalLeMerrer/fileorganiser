@@ -139,9 +139,18 @@
       // Open a file using the default app
       app.ports.openFile.subscribe(function (filePath) {
         window.go.main.App.OpenFile(filePath)
+        .catch(msg => {
+          console.error(msg);
+          app.ports.receiveError.send(msg);
+        });
+      });
+
+      // Create a directory
+      app.ports.createDirectory.subscribe(function (dirPath) {
+        window.go.main.App.CreateDirectory(dirPath)
         .then((result) =>
           {
-            console.log("opened file", filePath)
+            app.ports.receiveCreatedDirectory.send(result);
           }
         ).catch(msg => {
           console.error(msg);

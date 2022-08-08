@@ -15,7 +15,7 @@ import Keyboard.Key as Key
 import List.Extra
 import String.Mark as Mark exposing (defaultOptions)
 import Task
-import Time exposing (Month(..), Posix)
+import Time exposing (Month(..), Posix, millisToPosix)
 
 
 
@@ -76,7 +76,8 @@ type FocusedZone
     = Confirmation
     | Filtering
     | LeftSide
-    | NameEditor
+    | FileNameEditor
+    | DirNameEditor
     | RightSide
     | SourceSearchReplace
 
@@ -105,6 +106,9 @@ main =
 
 
 -- OUTPUT PORTS
+
+
+port createDirectory : String -> Cmd msg
 
 
 port getCurrentDirectoryPath : () -> Cmd msg
@@ -147,6 +151,9 @@ port filesRenamed : (Json.Encode.Value -> msg) -> Sub msg
 port fileRemoved : (Json.Encode.Value -> msg) -> Sub msg
 
 
+port receiveCreatedDirectory : (Json.Encode.Value -> msg) -> Sub msg
+
+
 port receiveCurrentDirectoryPath : (String -> msg) -> Sub msg
 
 
@@ -182,18 +189,20 @@ type alias Model =
     , destinationFilter : String
     , destinationSubdirectories : List File
     , editedFile : Maybe File
-    , editedName : String
+    , editedDirName : String
+    , editedFileName : String
     , error : Maybe String
     , filesToDelete : List File
-    , sourceFilter : String
-    , sourceSearch : String
-    , sourceReplace : String
+    , focusedZone : FocusedZone
     , history : List (List Command)
+    , isCreatingDirectory : Bool
     , isUndoing : Bool
     , pathSeparator : String
-    , focusedZone : FocusedZone
     , sourceDirectoryFiles : List File
     , sourceDirectoryPath : String
+    , sourceFilter : String
+    , sourceReplace : String
+    , sourceSearch : String
     , sourceSubDirectories : List File
     , timezone : Time.Zone
     }
@@ -206,19 +215,21 @@ init _ =
       , destinationDirectoryPath = ""
       , destinationFilter = ""
       , destinationSubdirectories = []
+      , editedDirName = ""
       , editedFile = Nothing
-      , editedName = ""
+      , editedFileName = ""
       , error = Nothing
       , filesToDelete = []
-      , isUndoing = False
-      , sourceFilter = ""
-      , sourceSearch = ""
-      , sourceReplace = ""
-      , history = []
-      , pathSeparator = unixPathSep
       , focusedZone = LeftSide
+      , history = []
+      , isCreatingDirectory = False
+      , isUndoing = False
+      , pathSeparator = unixPathSep
       , sourceDirectoryFiles = []
       , sourceDirectoryPath = "."
+      , sourceFilter = ""
+      , sourceReplace = ""
+      , sourceSearch = ""
       , sourceSubDirectories = []
       , timezone = Time.utc
       }
@@ -241,6 +252,7 @@ type alias Renaming =
 
 type Msg
     = AdjustTimeZone Time.Zone
+    | BackendReturnedCreatedDirectory File
     | BackendReturnedCurrentDirPath String
     | BackendReturnedDestinationDirectories (List File)
     | BackendReturnedDestinationDirectoryPath String
@@ -271,7 +283,9 @@ type Msg
     | UserClickedSynchronizeButton
     | UserChangedFocusedZone FocusedZone
     | UserModifiedFileName String
+    | UserModifiedDirName String
     | UserPressedKey Target KeyboardEvent
+    | UserValidatedDirName
     | UserValidatedFilename
 
 
@@ -286,6 +300,12 @@ update msg model =
         AdjustTimeZone newZone ->
             ( { model | timezone = newZone }
             , Cmd.none
+            )
+
+        BackendReturnedCreatedDirectory file ->
+            ( { model | isCreatingDirectory = False, editedDirName = "" }
+            , getDestinationSubdirectories model.destinationDirectoryPath
+              -- TODO change to newly created dir
             )
 
         BackendReturnedCurrentDirPath path ->
@@ -428,7 +448,7 @@ update msg model =
                 in
                 { model
                     | history = commands :: model.history
-                    , editedName = ""
+                    , editedFileName = ""
                     , editedFile = Nothing
                     , focusedZone = LeftSide
                     , sourceDirectoryFiles =
@@ -527,18 +547,21 @@ update msg model =
             )
 
         UserModifiedFileName newName ->
-            ( { model | editedName = newName }, Cmd.none )
+            ( { model | editedFileName = newName }, Cmd.none )
+
+        UserModifiedDirName newName ->
+            ( { model | editedDirName = newName }, Cmd.none )
 
         UserValidatedFilename ->
             let
                 isConflicting =
-                    List.any (\f -> f.name == model.editedName) model.sourceDirectoryFiles
+                    List.any (\f -> f.name == model.editedFileName) model.sourceDirectoryFiles
             in
             case ( model.editedFile, isConflicting ) of
                 ( Just file, False ) ->
                     let
                         renaming =
-                            { file = { file | name = model.editedName }
+                            { file = { file | name = model.editedFileName }
                             , originalPath = file.name
                             }
                     in
@@ -547,7 +570,7 @@ update msg model =
                     )
 
                 ( Just _, True ) ->
-                    ( { model | error = Just ("A file with the name " ++ model.editedName ++ " already exists in the source directory") }
+                    ( { model | error = Just ("A file with the name " ++ model.editedFileName ++ " already exists in the source directory") }
                     , Cmd.none
                     )
 
@@ -635,6 +658,24 @@ update msg model =
             ( { model | sourceReplace = "" }
             , applyRenaming model renamings
             )
+
+        UserValidatedDirName ->
+            if model.isCreatingDirectory then
+                createNewDirectory model
+
+            else
+                ( model, Cmd.none )
+
+
+createNewDirectory : Model -> ( Model, Cmd Msg )
+createNewDirectory model =
+    let
+        dirPath =
+            model.destinationDirectoryPath
+                ++ model.pathSeparator
+                ++ model.editedDirName
+    in
+    ( model, createDirectory dirPath )
 
 
 toggleSelectionStatus : File -> File
@@ -775,17 +816,16 @@ renameSelectedSourceFile model =
             model.sourceDirectoryFiles
                 |> List.Extra.find (\f -> f.satisfiesFilter && f.status == Selected)
     in
-    case Debug.log "fileToEdit" fileToEdit of
+    case fileToEdit of
         Just file ->
             let
                 sourceDirectoryFiles =
                     model.sourceDirectoryFiles
                         |> List.Extra.updateIf (\f -> f == file) (\f -> { f | status = Edited })
-                        |> Debug.log "sourceDirectoryFiles"
             in
             ( { model
                 | editedFile = Just file
-                , editedName = file.name
+                , editedFileName = file.name
                 , sourceDirectoryFiles = sourceDirectoryFiles
               }
             , focusOn "filename-input" NoOp
@@ -1080,6 +1120,20 @@ openSelectedFolder model target =
     ( model, openFile folderToOpen )
 
 
+showDirNameEditor : Model -> Target -> ( Model, Cmd Msg )
+showDirNameEditor model target =
+    case target of
+        Source ->
+            ( model, Cmd.none )
+
+        Destination ->
+            ( { model
+                | isCreatingDirectory = True
+              }
+            , focusOn "dirname-input" NoOp
+            )
+
+
 processKeyboardShortcut : Model -> Target -> KeyboardEvent -> ( Model, Cmd Msg )
 processKeyboardShortcut model target event =
     case model.focusedZone of
@@ -1147,6 +1201,9 @@ processMainShortcuts model target event =
             ( Key.M, False ) ->
                 moveSelectedFiles model
 
+            ( Key.N, False ) ->
+                showDirNameEditor model target
+
             ( Key.O, False ) ->
                 openSelectedFile model target
 
@@ -1170,8 +1227,9 @@ processMainShortcuts model target event =
 subscriptions : Model -> Sub Msg
 subscriptions _ =
     Sub.batch
-        [ fileRemoved (decodeFile BackendReturnedRemovedFile)
+        [ fileRemoved (decodeFileWithPreviousName BackendReturnedRemovedFile)
         , filesRenamed (decodeRenamingList BackendReturnedRenamedFiles)
+        , receiveCreatedDirectory (decodeFile BackendReturnedCreatedDirectory)
         , receiveCurrentDirectoryPath BackendReturnedCurrentDirPath
         , receiveSourceDirectoryContent (decodeFileList BackendReturnedSourceDirectoryContent)
         , receiveDestinationDirectoryFiles (decodeFileList BackendReturnedDestinationFiles)
@@ -1220,8 +1278,8 @@ decodeFileList msg value =
             BackendReturnedError (Json.Decode.errorToString error)
 
 
-decodeFile : (File -> String -> Msg) -> Json.Encode.Value -> Msg
-decodeFile msg value =
+decodeFileWithPreviousName : (File -> String -> Msg) -> Json.Encode.Value -> Msg
+decodeFileWithPreviousName msg value =
     let
         decodedFile =
             Json.Decode.decodeValue fileDecoder value
@@ -1237,6 +1295,20 @@ decodeFile msg value =
             msg file ""
 
         ( Err error, _ ) ->
+            BackendReturnedError (Json.Decode.errorToString error)
+
+
+decodeFile : (File -> Msg) -> Json.Encode.Value -> Msg
+decodeFile msg value =
+    let
+        decodedFile =
+            Json.Decode.decodeValue fileDecoder value
+    in
+    case decodedFile of
+        Ok file ->
+            msg file
+
+        Err error ->
             BackendReturnedError (Json.Decode.errorToString error)
 
 
@@ -1418,6 +1490,29 @@ additionalHeaderClass model zone =
 
 viewDestinationSubdirectories : Model -> Html Msg
 viewDestinationSubdirectories model =
+    if model.isCreatingDirectory then
+        viewEditedDirectoryName model
+
+    else
+        viewReadOnlyDestinationSubdirectories model
+
+
+viewEditedDirectoryName : Model -> Html Msg
+viewEditedDirectoryName model =
+    form [ onSubmit UserValidatedDirName ]
+        [ input
+            [ class "file-input"
+            , id "dirname-input"
+            , onInput UserModifiedDirName
+            , onFocus (UserChangedFocusedZone DirNameEditor)
+            , value model.editedDirName
+            ]
+            []
+        ]
+
+
+viewReadOnlyDestinationSubdirectories : Model -> Html Msg
+viewReadOnlyDestinationSubdirectories model =
     let
         currentDirName =
             String.split model.pathSeparator model.destinationDirectoryPath
@@ -1588,8 +1683,8 @@ viewEditedFilename model =
             [ class "file-input"
             , id "filename-input"
             , onInput UserModifiedFileName
-            , onFocus (UserChangedFocusedZone NameEditor)
-            , value model.editedName
+            , onFocus (UserChangedFocusedZone FileNameEditor)
+            , value model.editedFileName
             ]
             []
         ]
@@ -1709,7 +1804,7 @@ viewFocusedZone model =
             LeftSide ->
                 "LeftSide | "
 
-            NameEditor ->
+            FileNameEditor ->
                 "NameEditor | "
 
             RightSide ->
@@ -1717,3 +1812,6 @@ viewFocusedZone model =
 
             SourceSearchReplace ->
                 "SourceSearchReplace | "
+
+            DirNameEditor ->
+                "DirNameEditor | "

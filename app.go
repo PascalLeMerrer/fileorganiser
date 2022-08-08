@@ -7,6 +7,7 @@ import (
 	"time"
 	"github.com/skratchdot/open-golang/open"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
+	"fmt"
 )
 
 // App struct
@@ -264,7 +265,6 @@ func (a *App) Rename(renamings []Renaming) ([]FileInfo, error) {
 
 	return result, nil
 }
-
 func (a *App) Remove(filePath string) (FileInfo, error) {
 	info, err := os.Stat(filePath)
 	if err != nil {
@@ -279,6 +279,32 @@ func (a *App) Remove(filePath string) (FileInfo, error) {
         IsDir:   info.IsDir(),
     }
     err = os.Remove(filePath)
+	return fileInfo, err
+}
+
+func (a *App) CreateDirectory(dirPath string) (FileInfo, error) {
+
+	fmt.Println("CreateDirectory: " + dirPath)
+    err := os.Mkdir(dirPath, 0755)
+    if err != nil {
+		return FileInfo{}, err
+    }
+
+	info, err := os.Stat(dirPath)
+	if err != nil {
+		return FileInfo{}, err
+	}
+	fileInfo := FileInfo{
+        Name:    info.Name(),
+        DirPath: dirPath,
+        Size:    info.Size(),
+        Mode:    info.Mode(),
+        ModTime: info.ModTime(),
+        IsDir:   info.IsDir(),
+        PreviousName: "",
+    }
+
+
 	return fileInfo, err
 }
 
