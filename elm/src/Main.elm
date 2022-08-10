@@ -208,31 +208,36 @@ type alias Model =
     }
 
 
+defaultModel : Model
+defaultModel =
+    { areFilterSynchronized = False
+    , destinationDirectoryFiles = []
+    , destinationDirectoryPath = ""
+    , destinationFilter = ""
+    , destinationSubdirectories = []
+    , editedDirName = ""
+    , editedFile = Nothing
+    , editedFileName = ""
+    , error = Nothing
+    , filesToDelete = []
+    , focusedZone = LeftSide
+    , history = []
+    , isCreatingDirectory = False
+    , isUndoing = False
+    , pathSeparator = unixPathSep
+    , sourceDirectoryFiles = []
+    , sourceDirectoryPath = "."
+    , sourceFilter = ""
+    , sourceReplace = ""
+    , sourceSearch = ""
+    , sourceSubDirectories = []
+    , timezone = Time.utc
+    }
+
+
 init : () -> ( Model, Cmd Msg )
 init _ =
-    ( { areFilterSynchronized = False
-      , destinationDirectoryFiles = []
-      , destinationDirectoryPath = ""
-      , destinationFilter = ""
-      , destinationSubdirectories = []
-      , editedDirName = ""
-      , editedFile = Nothing
-      , editedFileName = ""
-      , error = Nothing
-      , filesToDelete = []
-      , focusedZone = LeftSide
-      , history = []
-      , isCreatingDirectory = False
-      , isUndoing = False
-      , pathSeparator = unixPathSep
-      , sourceDirectoryFiles = []
-      , sourceDirectoryPath = "."
-      , sourceFilter = ""
-      , sourceReplace = ""
-      , sourceSearch = ""
-      , sourceSubDirectories = []
-      , timezone = Time.utc
-      }
+    ( defaultModel
     , Cmd.batch
         [ Task.perform AdjustTimeZone Time.here
         , getCurrentDirectoryPath ()
@@ -748,13 +753,16 @@ filterDestinationDirectories model =
     case words of
         [] ->
             { model
-                | destinationSubdirectories = List.map (\f -> { f | satisfiesFilter = True }) model.destinationSubdirectories
+                | destinationSubdirectories =
+                    List.map (\f -> { f | satisfiesFilter = True })
+                        model.destinationSubdirectories
             }
 
         _ ->
             { model
                 | destinationSubdirectories =
-                    List.map (\f -> { f | satisfiesFilter = filterByName words f }) model.destinationSubdirectories
+                    List.map (\f -> { f | satisfiesFilter = filterByName words f || filterByParentPath words f })
+                        model.destinationSubdirectories
             }
 
 
@@ -769,6 +777,19 @@ filterByName filters file =
                 String.toLower file.name
         in
         List.all (\word -> String.contains (String.toLower word) lowerCaseFilename) filters
+
+
+filterByParentPath : List String -> File -> Bool
+filterByParentPath filters file =
+    if file.name == ".." then
+        True
+
+    else
+        let
+            lowerCaseParentPath =
+                String.toLower file.parentPath
+        in
+        List.all (\word -> String.contains (String.toLower word) lowerCaseParentPath) filters
 
 
 synchronizeFilters : Model -> Model
