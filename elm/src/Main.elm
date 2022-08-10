@@ -1146,6 +1146,14 @@ processKeyboardShortcut model target event =
         RightSide ->
             processMainShortcuts model target event
 
+        DirNameEditor ->
+            case event.keyCode of
+                Key.Escape ->
+                    ( { model | isCreatingDirectory = False, editedDirName = "" }, Cmd.none )
+
+                _ ->
+                    ( model, Cmd.none )
+
         _ ->
             ( model, Cmd.none )
 
@@ -1381,7 +1389,7 @@ viewLeftSide model =
         conditionalAttributes =
             case ( model.editedFile, model.focusedZone ) of
                 ( Nothing, LeftSide ) ->
-                    [ Events.preventDefaultOn "keydown" (keyDecoder Source)
+                    [ Events.preventDefaultOn "keydown" (keyDecoderPreventingDefault Source)
                     ]
 
                 ( Nothing, _ ) ->
@@ -1401,12 +1409,21 @@ viewLeftSide model =
         viewSource model
 
 
-keyDecoder : Target -> Json.Decode.Decoder ( Msg, Bool )
-keyDecoder target =
+keyDecoderPreventingDefault : Target -> Json.Decode.Decoder ( Msg, Bool )
+keyDecoderPreventingDefault target =
     decodeKeyboardEvent
         |> Json.Decode.map
             (\key ->
                 ( UserPressedKey target key, True )
+            )
+
+
+simpleKeyDecoder : Target -> Json.Decode.Decoder Msg
+simpleKeyDecoder target =
+    decodeKeyboardEvent
+        |> Json.Decode.map
+            (\key ->
+                UserPressedKey target key
             )
 
 
@@ -1416,7 +1433,7 @@ viewRightSide model =
         conditionalAttributes =
             case model.focusedZone of
                 RightSide ->
-                    [ Events.preventDefaultOn "keydown" (keyDecoder Destination) ]
+                    [ Events.preventDefaultOn "keydown" (keyDecoderPreventingDefault Destination) ]
 
                 _ ->
                     []
@@ -1505,6 +1522,7 @@ viewEditedDirectoryName model =
             , id "dirname-input"
             , onInput UserModifiedDirName
             , onFocus (UserChangedFocusedZone DirNameEditor)
+            , Events.on "keydown" (simpleKeyDecoder Source)
             , value model.editedDirName
             ]
             []
@@ -1760,7 +1778,7 @@ viewFooter model =
 
         conditionalAttributes =
             if isWaitingForConfirmation then
-                [ Events.preventDefaultOn "keydown" (keyDecoder Source)
+                [ Events.preventDefaultOn "keydown" (keyDecoderPreventingDefault Source)
                 , onFocus (UserChangedFocusedZone Confirmation)
                 ]
 
