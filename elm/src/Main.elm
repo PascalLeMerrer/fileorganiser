@@ -706,7 +706,7 @@ toggleSelectionStatus file =
             file
 
         SelectedForDeletion ->
-            -- TODO  Remove the list of files selected for deletion
+            -- TODO  Remove from the list of files selected for deletion
             { file | status = Selected }
 
 
@@ -878,9 +878,7 @@ prepareSelectedFilesForRemoval model =
     case model.focusedZone of
         LeftSide ->
             ( { model
-                | filesToDelete =
-                    model.sourceDirectoryFiles
-                        |> filterSelectedFiles
+                | filesToDelete = filterSelectedFiles model.sourceDirectoryFiles
                 , focusedZone = Confirmation
               }
                 |> changeStatusOfSelectedSourceFiles SelectedForDeletion
@@ -943,21 +941,13 @@ changeStatusOfSelectedDestinationFiles fileStatus model =
 removeSelectedFiles : Model -> ( Model, Cmd Msg )
 removeSelectedFiles model =
     let
-        dirPath =
-            case model.focusedZone of
-                RightSide ->
-                    model.sourceDirectoryPath
-
-                _ ->
-                    model.destinationDirectoryPath
-
         commands =
             model.filesToDelete
                 |> List.map
                     (\file ->
                         removeFile <|
                             Json.Encode.string <|
-                                dirPath
+                                file.parentPath
                                     ++ model.pathSeparator
                                     ++ file.name
                     )
