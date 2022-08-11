@@ -308,9 +308,16 @@ update msg model =
             )
 
         BackendReturnedCreatedDirectory file ->
-            ( { model | isCreatingDirectory = False, editedDirName = "" }
-            , getDestinationSubdirectories model.destinationDirectoryPath
-              -- TODO change to newly created dir
+            ( { model
+                | isCreatingDirectory = False
+                , editedDirName = ""
+                , focusedZone = RightSide
+              }
+            , Cmd.batch
+                -- TODO change to newly created dir?
+                [ getDestinationSubdirectories model.destinationDirectoryPath
+                , focusOn "container-right" NoOp
+                ]
             )
 
         BackendReturnedCurrentDirPath path ->
@@ -467,7 +474,10 @@ update msg model =
                             )
                             model.sourceDirectoryFiles
                 }
-            , getSourceDirectoryContent model.sourceDirectoryPath
+            , Cmd.batch
+                [ getSourceDirectoryContent model.sourceDirectoryPath
+                , focusOn "container-left" NoOp
+                ]
             )
 
         BackendReturnedSourceDirectoryPath path ->
@@ -536,7 +546,7 @@ update msg model =
                 , focusedZone = LeftSide
               }
                 |> filterSourceFiles
-            , Cmd.none
+            , focusOn "container-left" NoOp
             )
 
         UserClickedDestinationFile file ->
@@ -634,7 +644,7 @@ update msg model =
                 , sourceDirectoryFiles = List.map unselectForDeletion model.sourceDirectoryFiles
                 , destinationDirectoryFiles = List.map unselectForDeletion model.destinationDirectoryFiles
               }
-            , Cmd.none
+            , focusOn "container-left" NoOp
             )
 
         UserClickedReload target ->
@@ -874,7 +884,7 @@ prepareSelectedFilesForRemoval model =
                 , focusedZone = Confirmation
               }
                 |> changeStatusOfSelectedSourceFiles SelectedForDeletion
-            , Cmd.none
+            , focusOn "deleteButton" NoOp
             )
 
         RightSide ->
@@ -885,7 +895,7 @@ prepareSelectedFilesForRemoval model =
                 , focusedZone = Confirmation
               }
                 |> changeStatusOfSelectedDestinationFiles SelectedForDeletion
-            , Cmd.none
+            , focusOn "deleteButton" NoOp
             )
 
         _ ->
@@ -935,21 +945,24 @@ removeSelectedFiles model =
 
                 _ ->
                     model.destinationDirectoryPath
+
+        commands =
+            model.filesToDelete
+                |> List.map
+                    (\file ->
+                        removeFile <|
+                            Json.Encode.string <|
+                                dirPath
+                                    ++ model.pathSeparator
+                                    ++ file.name
+                    )
     in
     ( { model
         | filesToDelete = []
         , focusedZone = LeftSide
       }
-    , model.filesToDelete
-        |> List.map
-            (\file ->
-                removeFile <|
-                    Json.Encode.string <|
-                        dirPath
-                            ++ model.pathSeparator
-                            ++ file.name
-            )
-        |> Cmd.batch
+    , Cmd.batch
+        (focusOn "container-left" NoOp :: commands)
     )
 
 
@@ -1187,7 +1200,7 @@ processConfirmationShortcuts model event =
 
         ( Key.Escape, False, False ) ->
             ( { model | filesToDelete = [], focusedZone = LeftSide }
-            , Cmd.none
+            , focusOn "container-left" NoOp
             )
 
         _ ->
