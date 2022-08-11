@@ -826,7 +826,7 @@ moveSelectedFiles model =
 
                 _ ->
                     ( model.sourceDirectoryFiles
-                        |> List.filter (\f -> f.satisfiesFilter && f.status == Selected)
+                        |> filterSelectedFiles
                         |> List.map (\file -> file.parentPath ++ model.pathSeparator ++ file.name)
                     , model.destinationDirectoryPath
                     )
@@ -880,7 +880,7 @@ prepareSelectedFilesForRemoval model =
             ( { model
                 | filesToDelete =
                     model.sourceDirectoryFiles
-                        |> List.filter (\f -> f.satisfiesFilter && f.status == Selected)
+                        |> filterSelectedFiles
                 , focusedZone = Confirmation
               }
                 |> changeStatusOfSelectedSourceFiles SelectedForDeletion
@@ -900,6 +900,11 @@ prepareSelectedFilesForRemoval model =
 
         _ ->
             ( model, Cmd.none )
+
+
+filterSelectedFiles : List File -> List File
+filterSelectedFiles files =
+    List.filter (\f -> f.satisfiesFilter && f.status == Selected) files
 
 
 changeStatusOfSelectedSourceFiles : FileStatus -> Model -> Model
