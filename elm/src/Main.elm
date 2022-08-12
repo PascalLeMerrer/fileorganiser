@@ -1565,7 +1565,7 @@ viewSourceSubdirectories : Model -> Html Msg
 viewSourceSubdirectories model =
     div [ class "panel" ]
         [ div [ class <| "panel-header" ++ additionalHeaderClass model LeftSide ]
-            [ h2 [] [ text <| "Source directory: " ++ truncatePath model.sourceDirectoryPath ]
+            [ h2 [] [ text <| "Source: " ++ truncatePath model.sourceDirectoryPath ]
             , span []
                 [ button
                     [ class "btn"
@@ -1623,7 +1623,7 @@ viewDestinationSubdirectories model =
     in
     div [ class "panel" ]
         [ div [ class <| "panel-header" ++ additionalHeaderClass model RightSide ]
-            [ h2 [] [ text <| "Destination directory: " ++ truncatePath model.destinationDirectoryPath ]
+            [ h2 [] [ text <| "Destination: " ++ truncatePath model.destinationDirectoryPath ]
             , span []
                 [ button
                     [ class "btn"
