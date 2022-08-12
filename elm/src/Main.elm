@@ -1,4 +1,4 @@
-port module Main exposing (..)
+port module Main exposing (File, FileStatus(..), FocusedZone, Model, Msg, defaultModel, filterDestinationDirectories, main)
 
 import Browser
 import Browser.Dom
@@ -15,17 +15,19 @@ import Keyboard.Key as Key
 import List.Extra
 import String.Mark as Mark exposing (defaultOptions)
 import Task
-import Time exposing (Month(..), Posix, millisToPosix)
+import Time exposing (Month(..), Posix)
 
 
 
 -- antislash is doubled for escaping
 
 
+windowsPathSep : String
 windowsPathSep =
     "\\"
 
 
+unixPathSep : String
 unixPathSep =
     "/"
 
@@ -314,7 +316,7 @@ update msg model =
             , Cmd.none
             )
 
-        BackendReturnedCreatedDirectory file ->
+        BackendReturnedCreatedDirectory _ ->
             ( { model
                 | isCreatingDirectory = False
                 , editedDirName = ""
@@ -330,6 +332,7 @@ update msg model =
 
         BackendReturnedCurrentDirPath path ->
             let
+                pathSeparator : String
                 pathSeparator =
                     if String.contains windowsPathSep path then
                         windowsPathSep
@@ -404,9 +407,11 @@ update msg model =
 
               else
                 let
+                    firstMovedFile : Maybe File
                     firstMovedFile =
                         List.head files
 
+                    destination : String
                     destination =
                         case firstMovedFile of
                             Just file ->
@@ -415,6 +420,7 @@ update msg model =
                             Nothing ->
                                 ""
 
+                    source : String
                     source =
                         if destination == model.destinationDirectoryPath then
                             model.sourceDirectoryPath
@@ -460,6 +466,7 @@ update msg model =
                         List.map2
                             (\file originalPath ->
                                 let
+                                    newFile : File
                                     newFile =
                                         { file | status = Selected }
                                 in
@@ -550,9 +557,11 @@ update msg model =
 
         UserClickedSourceFile file ->
             let
+                newFile : File
                 newFile =
                     file |> toggleSelectionStatus
 
+                updatedSourceFiles : List File
                 updatedSourceFiles =
                     List.Extra.updateIf ((==) file) (\_ -> newFile) model.sourceDirectoryFiles
             in
@@ -567,9 +576,11 @@ update msg model =
 
         UserClickedDestinationFile file ->
             let
+                newFile : File
                 newFile =
                     file |> toggleSelectionStatus
 
+                updatedDestinationFiles : List File
                 updatedDestinationFiles =
                     List.Extra.updateIf ((==) file) (\_ -> newFile) model.destinationDirectoryFiles
             in
@@ -585,6 +596,7 @@ update msg model =
 
         UserClickedDestinationDirectory file ->
             let
+                newDestinationPath : String
                 newDestinationPath =
                     case file.name of
                         ".." ->
@@ -602,6 +614,7 @@ update msg model =
 
         UserClickedSourceDirectory file ->
             let
+                newSourcePath : String
                 newSourcePath =
                     case file.name of
                         ".." ->
@@ -627,6 +640,7 @@ update msg model =
 
         UserClickedCancel ->
             let
+                unselectForDeletion : File -> File
                 unselectForDeletion file =
                     if file.status == SelectedForDeletion then
                         { file | status = Selected }
@@ -669,6 +683,7 @@ update msg model =
 
         UserClickedReplaceButton ->
             let
+                renamings : List Renaming
                 renamings =
                     model.sourceDirectoryFiles
                         |> List.filterMap (nameReplacement model.sourceSearch model.sourceReplace)
@@ -686,15 +701,18 @@ update msg model =
 
         UserSubmittedFilename ->
             let
+                isConflicting : Bool
                 isConflicting =
                     List.any (\f -> f.name == model.editedFileName) model.sourceDirectoryFiles
 
+                isNameEmpty : Bool
                 isNameEmpty =
                     String.isEmpty model.editedFileName
             in
             case ( model.editedFile, isConflicting, isNameEmpty ) of
                 ( Just file, False, False ) ->
                     let
+                        renaming : Renaming
                         renaming =
                             { file = { file | name = model.editedFileName }
                             , originalPath = file.name
@@ -719,6 +737,7 @@ update msg model =
 createNewDirectory : Model -> ( Model, Cmd Msg )
 createNewDirectory model =
     let
+        dirPath : String
         dirPath =
             model.destinationDirectoryPath
                 ++ model.pathSeparator
@@ -761,6 +780,7 @@ nameReplacement before after file =
 parentDir : Model -> String -> String
 parentDir model path =
     let
+        index : Int
         index =
             String.indexes model.pathSeparator path
                 |> List.Extra.last
@@ -772,6 +792,7 @@ parentDir model path =
 filterSourceFiles : Model -> Model
 filterSourceFiles model =
     let
+        words : List String
         words =
             String.words model.sourceFilter
     in
@@ -791,6 +812,7 @@ filterSourceFiles model =
 filterDestinationDirectories : Model -> Model
 filterDestinationDirectories model =
     let
+        words : List String
         words =
             String.words model.destinationFilter
     in
@@ -817,6 +839,7 @@ filterByName filters file =
 
     else
         let
+            lowerCaseFilename : String
             lowerCaseFilename =
                 String.toLower file.name
         in
@@ -830,6 +853,7 @@ filterByParentPath filters file =
 
     else
         let
+            lowerCaseParentPath : String
             lowerCaseParentPath =
                 String.toLower file.parentPath
         in
@@ -877,6 +901,7 @@ moveSelectedFiles model =
 renameSelectedSourceFile : Model -> ( Model, Cmd Msg )
 renameSelectedSourceFile model =
     let
+        fileToEdit : Maybe File
         fileToEdit =
             model.sourceDirectoryFiles
                 |> List.Extra.find (\f -> f.satisfiesFilter && f.status == Selected)
@@ -884,6 +909,7 @@ renameSelectedSourceFile model =
     case fileToEdit of
         Just file ->
             let
+                sourceDirectoryFiles : List File
                 sourceDirectoryFiles =
                     model.sourceDirectoryFiles
                         |> List.Extra.updateIf (\f -> f == file) (\f -> { f | status = Edited })
@@ -1011,6 +1037,7 @@ changeStatusOfSelectedDestinationFiles fileStatus model =
 removeSelectedFiles : Model -> ( Model, Cmd Msg )
 removeSelectedFiles model =
     let
+        commands : List (Cmd msg)
         commands =
             model.filesToDelete
                 |> List.map
@@ -1034,6 +1061,7 @@ removeSelectedFiles model =
 applyRenaming : Model -> List Renaming -> Cmd Msg
 applyRenaming model renamings =
     let
+        encodedRenamings : List Json.Encode.Value
         encodedRenamings =
             renamings
                 |> List.map
@@ -1091,14 +1119,17 @@ undo model =
 undoMove : Model -> List (Cmd Msg) -> Command -> ( Model, List (Cmd Msg) )
 undoMove model cmds command =
     let
+        source : String
         source =
             command.destination
                 |> Maybe.withDefault ""
 
+        filesToMove : List String
         filesToMove =
             command.files
                 |> List.map (\f -> source ++ model.pathSeparator ++ f.name)
 
+        destination : String
         destination =
             command.source
                 |> Maybe.withDefault ""
@@ -1111,12 +1142,15 @@ undoMove model cmds command =
 undoRenaming : Model -> List (Cmd Msg) -> Command -> ( Model, List (Cmd Msg) )
 undoRenaming model cmds command =
     let
+        oldName : String
         oldName =
             command.destination |> Maybe.withDefault ""
 
+        newName : String
         newName =
             command.source |> Maybe.withDefault ""
 
+        encodedValue : Json.Encode.Value
         encodedValue =
             Json.Encode.object
                 [ ( "oldName", Json.Encode.string oldName )
@@ -1135,6 +1169,7 @@ changeAllFileStatus model target status =
     case target of
         Source ->
             let
+                updatedFiles : List File
                 updatedFiles =
                     model.sourceDirectoryFiles
                         |> List.map
@@ -1155,6 +1190,7 @@ changeAllFileStatus model target status =
 
         Destination ->
             let
+                updatedFiles : List File
                 updatedFiles =
                     model.destinationDirectoryFiles
                         |> List.map
@@ -1187,6 +1223,7 @@ reload model target =
 openSelectedFile : Model -> Target -> ( Model, Cmd Msg )
 openSelectedFile model target =
     let
+        fileToOpen : Maybe File
         fileToOpen =
             case target of
                 Source ->
@@ -1208,6 +1245,7 @@ openSelectedFile model target =
 openSelectedFolder : Model -> Target -> ( Model, Cmd Msg )
 openSelectedFolder model target =
     let
+        folderToOpen : String
         folderToOpen =
             case target of
                 Source ->
@@ -1258,6 +1296,7 @@ processKeyboardShortcut model target event =
             case event.keyCode of
                 Key.Escape ->
                     let
+                        sourceDirectoryFiles : List File
                         sourceDirectoryFiles =
                             model.sourceDirectoryFiles
                                 |> List.Extra.updateIf (\f -> f.status == Edited) (\f -> { f | status = Selected })
@@ -1415,9 +1454,11 @@ decodeFileList msg value =
 decodeFileWithPreviousName : (File -> String -> Msg) -> Json.Encode.Value -> Msg
 decodeFileWithPreviousName msg value =
     let
+        decodedFile : Result Json.Decode.Error File
         decodedFile =
             Json.Decode.decodeValue fileDecoder value
 
+        decodedPreviousName : Result Json.Decode.Error String
         decodedPreviousName =
             Json.Decode.decodeValue (Json.Decode.field "PreviousName" Json.Decode.string) value
     in
@@ -1435,6 +1476,7 @@ decodeFileWithPreviousName msg value =
 decodeFile : (File -> Msg) -> Json.Encode.Value -> Msg
 decodeFile msg value =
     let
+        decodedFile : Result Json.Decode.Error File
         decodedFile =
             Json.Decode.decodeValue fileDecoder value
     in
@@ -1514,6 +1556,7 @@ viewHeader model =
 viewLeftSide : Model -> Html Msg
 viewLeftSide model =
     let
+        conditionalAttributes : List (Html.Attribute Msg)
         conditionalAttributes =
             case ( model.editedFile, model.focusedZone ) of
                 ( Nothing, LeftSide ) ->
@@ -1558,6 +1601,7 @@ simpleKeyDecoder target =
 viewRightSide : Model -> Html Msg
 viewRightSide model =
     let
+        conditionalAttributes : List (Html.Attribute Msg)
         conditionalAttributes =
             case model.focusedZone of
                 RightSide ->
@@ -1618,6 +1662,7 @@ viewSourceSubdirectories model =
         ]
 
 
+additionalHeaderClass : Model -> FocusedZone -> String
 additionalHeaderClass model zone =
     if model.focusedZone == zone then
         " focused"
@@ -1644,6 +1689,7 @@ viewEditedDirectoryName model =
 viewDestinationSubdirectories : Model -> Html Msg
 viewDestinationSubdirectories model =
     let
+        newDirEditor : List (Html Msg)
         newDirEditor =
             if model.isCreatingDirectory then
                 [ viewEditedDirectoryName model ]
@@ -1691,9 +1737,11 @@ viewDirectory _ onClickMsg file =
 viewSourceFiles : Model -> Html Msg
 viewSourceFiles model =
     let
+        count : Int
         count =
             List.length model.sourceDirectoryFiles
 
+        countAsString : String
         countAsString =
             String.fromInt count
     in
@@ -1740,9 +1788,11 @@ viewSourceFiles model =
 viewDestinationFiles : Model -> Html Msg
 viewDestinationFiles model =
     let
+        count : Int
         count =
             List.length model.destinationDirectoryFiles
 
+        countAsString : String
         countAsString =
             String.fromInt count
     in
@@ -1785,6 +1835,7 @@ highlight =
 viewReadOnlyFile : Model -> (File -> Msg) -> Bool -> File -> Html Msg
 viewReadOnlyFile model onClickMsg canBeSearchedAndReplaced file =
     let
+        className : String
         className =
             case file.status of
                 Selected ->
@@ -1799,6 +1850,7 @@ viewReadOnlyFile model onClickMsg canBeSearchedAndReplaced file =
                 SelectedForDeletion ->
                     "filename marked-for-deletion"
 
+        fileName : List (Html Msg)
         fileName =
             if canBeSearchedAndReplaced then
                 case ( model.sourceSearch, model.sourceReplace ) of
@@ -1844,6 +1896,7 @@ viewEditedFilename model =
 viewDate : Model -> Time.Posix -> Html Msg
 viewDate model time =
     let
+        monthToString : Month -> String
         monthToString timeMonth =
             case timeMonth of
                 Jan ->
@@ -1882,14 +1935,17 @@ viewDate model time =
                 Dec ->
                     "12"
 
+        day : String
         day =
             String.fromInt (Time.toDay model.timezone time)
                 |> String.padLeft 2 '0'
 
+        month : String
         month =
             Time.toMonth model.timezone time
                 |> monthToString
 
+        year : String
         year =
             String.fromInt (Time.toYear model.timezone time)
     in
@@ -1899,9 +1955,11 @@ viewDate model time =
 viewFooter : Model -> Html Msg
 viewFooter model =
     let
+        isWaitingForConfirmation : Bool
         isWaitingForConfirmation =
             List.length model.filesToDelete > 0
 
+        className : String
         className =
             if model.error /= Nothing || isWaitingForConfirmation then
                 "danger"
@@ -1909,6 +1967,7 @@ viewFooter model =
             else
                 ""
 
+        conditionalAttributes : List (Html.Attribute Msg)
         conditionalAttributes =
             if isWaitingForConfirmation then
                 [ Events.preventDefaultOn "keydown" (keyDecoderPreventingDefault Source)
@@ -1919,9 +1978,7 @@ viewFooter model =
                 []
     in
     footer
-        ([ class className ]
-            ++ conditionalAttributes
-        )
+        (class className :: conditionalAttributes)
         [ case model.error of
             Nothing ->
                 viewFocusedZone model
@@ -1974,6 +2031,7 @@ viewFocusedZone model =
                 "ErrorMessage _ "
 
 
+maxVisiblePathLength : number
 maxVisiblePathLength =
     45
 
@@ -1981,6 +2039,7 @@ maxVisiblePathLength =
 truncatePath : String -> String
 truncatePath fullPath =
     let
+        actualLength : Int
         actualLength =
             String.length fullPath
     in

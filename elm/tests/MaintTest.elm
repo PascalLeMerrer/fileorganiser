@@ -1,12 +1,12 @@
-module MaintTest exposing (..)
+module MaintTest exposing (suite)
 
-import Expect exposing (Expectation)
-import Fuzz exposing (Fuzzer, int, list, string)
-import Main exposing (FileStatus(..), Model, defaultModel, filterDestinationDirectories)
-import Test exposing (..)
+import Expect
+import Main exposing (File, FileStatus(..), Model, defaultModel, filterDestinationDirectories)
+import Test exposing (Test, describe, test)
 import Time exposing (millisToPosix)
 
 
+dir1 : File
 dir1 =
     { isDir = True
     , mode = 777
@@ -19,14 +19,17 @@ dir1 =
     }
 
 
+dir2 : File
 dir2 =
     { dir1 | name = "dir2" }
 
 
+dir3 : File
 dir3 =
     { dir1 | name = "different" }
 
 
+dir4 : File
 dir4 =
     { dir1
         | name = "dirname4"
@@ -34,6 +37,7 @@ dir4 =
     }
 
 
+dir5 : File
 dir5 =
     { dir1
         | name = "dir5"
@@ -41,6 +45,7 @@ dir5 =
     }
 
 
+allDirs : List File
 allDirs =
     [ dir1
     , dir2
@@ -61,6 +66,7 @@ suite =
         [ test "identifies filenames containing a given string" <|
             \_ ->
                 let
+                    filteredModel : Model
                     filteredModel =
                         { model
                             | destinationFilter = "dirn"
@@ -68,6 +74,7 @@ suite =
                         }
                             |> filterDestinationDirectories
 
+                    expected : List File
                     expected =
                         [ { dir1 | satisfiesFilter = True }
                         , dir2
@@ -80,6 +87,7 @@ suite =
         , test "identifies parent path containing a given string" <|
             \_ ->
                 let
+                    filteredModel : Model
                     filteredModel =
                         { model
                             | destinationFilter = "ext"
@@ -87,6 +95,7 @@ suite =
                         }
                             |> filterDestinationDirectories
 
+                    expected : List File
                     expected =
                         [ dir1
                         , dir2
