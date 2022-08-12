@@ -49,7 +49,9 @@ h2 {
   line-height: 30px;
   margin: 0 0 0 20px;
   padding: 0 8px;
+  outline: none;
 }
+
 
 .panel-header .btn {
   min-width: 30px;

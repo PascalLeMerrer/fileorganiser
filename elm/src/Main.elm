@@ -74,6 +74,7 @@ type Operation
 
 type FocusedZone
     = Confirmation
+    | ErrorMessage
     | Filtering
     | LeftSide
     | FileNameEditor
@@ -197,6 +198,7 @@ type alias Model =
     , history : List (List Command)
     , isCreatingDirectory : Bool
     , isUndoing : Bool
+    , previousFocusedZone : FocusedZone
     , pathSeparator : String
     , sourceDirectoryFiles : List File
     , sourceDirectoryPath : String
@@ -225,6 +227,7 @@ defaultModel =
     , isCreatingDirectory = False
     , isUndoing = False
     , pathSeparator = unixPathSep
+    , previousFocusedZone = LeftSide
     , sourceDirectoryFiles = []
     , sourceDirectoryPath = "."
     , sourceFilter = ""
@@ -276,6 +279,7 @@ type Msg
     | UserClickedCancel
     | UserClickedClearSourceFilter
     | UserClickedClearDestinationFilter
+    | UserClickedCloseError
     | UserClickedDelete
     | UserClickedDestinationDirectory File
     | UserClickedDestinationDirectoryButton
@@ -312,6 +316,7 @@ update msg model =
                 | isCreatingDirectory = False
                 , editedDirName = ""
                 , focusedZone = RightSide
+                , previousFocusedZone = model.focusedZone
               }
             , Cmd.batch
                 -- TODO change to newly created dir?
@@ -348,7 +353,13 @@ update msg model =
             )
 
         BackendReturnedError errorMsg ->
-            ( { model | error = Just errorMsg }, Cmd.none )
+            ( { model
+                | error = Just errorMsg
+                , focusedZone = ErrorMessage
+                , previousFocusedZone = model.focusedZone
+              }
+            , focusOn "close-error" NoOp
+            )
 
         BackendReturnedSourceDirectoryContent directoryContent ->
             let
@@ -463,6 +474,7 @@ update msg model =
                     , editedFileName = ""
                     , editedFile = Nothing
                     , focusedZone = LeftSide
+                    , previousFocusedZone = model.focusedZone
                     , sourceDirectoryFiles =
                         List.map
                             (\f ->
@@ -544,6 +556,7 @@ update msg model =
             ( { model
                 | sourceDirectoryFiles = updatedSourceFiles
                 , focusedZone = LeftSide
+                , previousFocusedZone = model.focusedZone
               }
                 |> filterSourceFiles
             , focusOn "container-left" NoOp
@@ -566,31 +579,6 @@ update msg model =
 
         UserModifiedDirName newName ->
             ( { model | editedDirName = newName }, Cmd.none )
-
-        UserValidatedFilename ->
-            let
-                isConflicting =
-                    List.any (\f -> f.name == model.editedFileName) model.sourceDirectoryFiles
-            in
-            case ( model.editedFile, isConflicting ) of
-                ( Just file, False ) ->
-                    let
-                        renaming =
-                            { file = { file | name = model.editedFileName }
-                            , originalPath = file.name
-                            }
-                    in
-                    ( { model | error = Nothing }
-                    , applyRenaming model [ renaming ]
-                    )
-
-                ( Just _, True ) ->
-                    ( { model | error = Just ("A file with the name " ++ model.editedFileName ++ " already exists in the source directory") }
-                    , Cmd.none
-                    )
-
-                ( Nothing, _ ) ->
-                    ( model, Cmd.none )
 
         UserClickedDestinationDirectory file ->
             let
@@ -624,7 +612,12 @@ update msg model =
             )
 
         UserChangedFocusedZone focus ->
-            ( { model | focusedZone = focus }, Cmd.none )
+            ( { model
+                | focusedZone = focus
+                , previousFocusedZone = model.focusedZone
+              }
+            , Cmd.none
+            )
 
         UserClickedDelete ->
             removeSelectedFiles model
@@ -641,11 +634,18 @@ update msg model =
             ( { model
                 | filesToDelete = []
                 , focusedZone = LeftSide
+                , previousFocusedZone = model.focusedZone
                 , sourceDirectoryFiles = List.map unselectForDeletion model.sourceDirectoryFiles
                 , destinationDirectoryFiles = List.map unselectForDeletion model.destinationDirectoryFiles
               }
             , focusOn "container-left" NoOp
             )
+
+        UserClickedCloseError ->
+            { model
+                | error = Nothing
+            }
+                |> restoreFocus
 
         UserClickedReload target ->
             reload model target
@@ -680,6 +680,34 @@ update msg model =
 
             else
                 ( model, Cmd.none )
+
+        UserValidatedFilename ->
+            let
+                isConflicting =
+                    List.any (\f -> f.name == model.editedFileName) model.sourceDirectoryFiles
+            in
+            case ( model.editedFile, isConflicting ) of
+                ( Just file, False ) ->
+                    let
+                        renaming =
+                            { file = { file | name = model.editedFileName }
+                            , originalPath = file.name
+                            }
+                    in
+                    ( { model | error = Nothing }
+                    , applyRenaming model [ renaming ]
+                    )
+
+                ( Just _, True ) ->
+                    ( { model
+                        | error = Just ("A file with the name " ++ model.editedFileName ++ " already exists in the source directory")
+                        , focusedZone = ErrorMessage
+                      }
+                    , focusOn "close-error" NoOp
+                    )
+
+                ( Nothing, _ ) ->
+                    ( model, Cmd.none )
 
 
 createNewDirectory : Model -> ( Model, Cmd Msg )
@@ -873,6 +901,40 @@ focusOn elementId msg =
     Browser.Dom.focus elementId |> Task.attempt (\_ -> msg)
 
 
+restoreFocus : Model -> ( Model, Cmd Msg )
+restoreFocus model =
+    ( { model | focusedZone = model.previousFocusedZone }
+    , focusOn
+        (case model.previousFocusedZone of
+            Confirmation ->
+                "delete-button"
+
+            ErrorMessage ->
+                "close-error"
+
+            Filtering ->
+                -- TODO handle filtering right
+                "filtering-left"
+
+            LeftSide ->
+                "container-left"
+
+            FileNameEditor ->
+                "filename-input"
+
+            DirNameEditor ->
+                "dirname-input"
+
+            RightSide ->
+                "container-right"
+
+            SourceSearchReplace ->
+                "search-left"
+        )
+        NoOp
+    )
+
+
 prepareSelectedFilesForRemoval : Model -> ( Model, Cmd Msg )
 prepareSelectedFilesForRemoval model =
     case model.focusedZone of
@@ -880,9 +942,10 @@ prepareSelectedFilesForRemoval model =
             ( { model
                 | filesToDelete = filterSelectedFiles model.sourceDirectoryFiles
                 , focusedZone = Confirmation
+                , previousFocusedZone = model.focusedZone
               }
                 |> changeStatusOfSelectedSourceFiles SelectedForDeletion
-            , focusOn "deleteButton" NoOp
+            , focusOn "delete-button" NoOp
             )
 
         RightSide ->
@@ -891,9 +954,10 @@ prepareSelectedFilesForRemoval model =
                     model.destinationDirectoryFiles
                         |> List.filter (\f -> f.status == Selected)
                 , focusedZone = Confirmation
+                , previousFocusedZone = model.focusedZone
               }
                 |> changeStatusOfSelectedDestinationFiles SelectedForDeletion
-            , focusOn "deleteButton" NoOp
+            , focusOn "delete-button" NoOp
             )
 
         _ ->
@@ -1372,6 +1436,7 @@ viewHeader model =
             [ input
                 [ class "input"
                 , type_ "text"
+                , id "filtering-left"
                 , onInput UserChangedSourceFilter
                 , onFocus (UserChangedFocusedZone Filtering)
                 , value model.sourceFilter
@@ -1395,6 +1460,7 @@ viewHeader model =
             [ input
                 [ class "input"
                 , type_ "text"
+                , id "filtering-right"
                 , onInput UserChangedDestinationFilter
                 , onFocus (UserChangedFocusedZone Filtering)
                 , value model.destinationFilter
@@ -1613,6 +1679,7 @@ viewSourceFiles model =
             , div [ class "search-form" ]
                 [ input
                     [ class "input"
+                    , id "search-left"
                     , onFocus (UserChangedFocusedZone SourceSearchReplace)
                     , onInput UserChangedSourceSearch
                     , placeholder "Search"
@@ -1823,7 +1890,10 @@ viewFooter model =
                 viewFocusedZone model
 
             Just errorMsg ->
-                text errorMsg
+                div []
+                    [ text errorMsg
+                    , button [ id "close-error", class "btn", onClick UserClickedCloseError ] [ text "Ok" ]
+                    ]
         , case model.filesToDelete of
             [] ->
                 text ""
@@ -1833,7 +1903,7 @@ viewFooter model =
                     []
                     [ text "This will permanently delete the selected files. This cannot be undone."
                     , button [ class "btn", onClick UserClickedCancel ] [ text "Cancel" ]
-                    , button [ class "btn", onClick UserClickedDelete, id "deleteButton" ] [ text "DELETE" ]
+                    , button [ class "btn", onClick UserClickedDelete, id "delete-button" ] [ text "DELETE" ]
                     ]
         ]
 
@@ -1862,3 +1932,6 @@ viewFocusedZone model =
 
             DirNameEditor ->
                 "DirNameEditor | "
+
+            ErrorMessage ->
+                "ErrorMessage"
