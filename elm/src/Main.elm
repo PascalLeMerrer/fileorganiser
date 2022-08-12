@@ -1600,15 +1600,6 @@ additionalHeaderClass model zone =
         ""
 
 
-viewDestinationSubdirectories : Model -> Html Msg
-viewDestinationSubdirectories model =
-    if model.isCreatingDirectory then
-        viewEditedDirectoryName model
-
-    else
-        viewReadOnlyDestinationSubdirectories model
-
-
 viewEditedDirectoryName : Model -> Html Msg
 viewEditedDirectoryName model =
     form [ onSubmit UserValidatedDirName ]
@@ -1624,13 +1615,20 @@ viewEditedDirectoryName model =
         ]
 
 
-viewReadOnlyDestinationSubdirectories : Model -> Html Msg
-viewReadOnlyDestinationSubdirectories model =
+viewDestinationSubdirectories : Model -> Html Msg
+viewDestinationSubdirectories model =
     let
         currentDirName =
             String.split model.pathSeparator model.destinationDirectoryPath
                 |> List.Extra.last
                 |> Maybe.withDefault "Error: cannot get current dir name"
+
+        newDirEditor =
+            if model.isCreatingDirectory then
+                [ viewEditedDirectoryName model ]
+
+            else
+                []
     in
     div [ class "panel" ]
         [ div [ class <| "panel-header" ++ additionalHeaderClass model RightSide ]
@@ -1650,10 +1648,12 @@ viewReadOnlyDestinationSubdirectories model =
             ]
         , div
             [ class "panel-content" ]
-            (model.destinationSubdirectories
-                |> List.filter .satisfiesFilter
-                |> List.sortBy (.name >> String.toLower)
-                |> List.map (viewDirectory model UserClickedDestinationDirectory)
+            (newDirEditor
+                ++ (model.destinationSubdirectories
+                        |> List.filter .satisfiesFilter
+                        |> List.sortBy (.name >> String.toLower)
+                        |> List.map (viewDirectory model UserClickedDestinationDirectory)
+                   )
             )
         ]
 
