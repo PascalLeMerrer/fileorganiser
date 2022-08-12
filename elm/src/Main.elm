@@ -1600,7 +1600,7 @@ additionalHeaderClass model zone =
         " focused"
 
     else
-        ""
+        " unfocused"
 
 
 viewEditedDirectoryName : Model -> Html Msg
