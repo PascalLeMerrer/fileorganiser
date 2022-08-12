@@ -130,6 +130,9 @@ port moveFiles : ( List String, String ) -> Cmd msg
 port openFile : String -> Cmd msg
 
 
+port quit : () -> Cmd msg
+
+
 port removeFile : Json.Encode.Value -> Cmd msg
 
 
@@ -1310,6 +1313,14 @@ processMainShortcuts model target event =
             _ ->
                 ( model, Cmd.none )
 
+    else if event.altKey then
+        case event.keyCode of
+            Key.F4 ->
+                ( model, quit () )
+
+            _ ->
+                ( model, Cmd.none )
+
     else
         case ( event.keyCode, event.shiftKey ) of
             ( Key.F2, False ) ->
@@ -1939,28 +1950,28 @@ viewFocusedZone model =
     text <|
         case model.focusedZone of
             Confirmation ->
-                "Confirmation | "
+                "Confirmation _ "
 
             Filtering ->
-                "Filtering | "
+                "Filtering _ "
 
             LeftSide ->
-                "LeftSide | "
+                "LeftSide _ "
 
             FileNameEditor ->
-                "NameEditor | "
+                "NameEditor _ "
 
             RightSide ->
-                "RightSide | "
+                "RightSide _ "
 
             SourceSearchReplace ->
-                "SourceSearchReplace | "
+                "SourceSearchReplace _ "
 
             DirNameEditor ->
-                "DirNameEditor | "
+                "DirNameEditor _ "
 
             ErrorMessage ->
-                "ErrorMessage"
+                "ErrorMessage _ "
 
 
 maxVisiblePathLength =

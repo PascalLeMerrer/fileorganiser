@@ -158,6 +158,11 @@
         });
       });
 
+      // Quit the app
+      app.ports.quit.subscribe(function () {
+        window.go.main.App.Exit();
+      });
+
   </script>
 </body>
 

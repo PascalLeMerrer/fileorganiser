@@ -311,3 +311,10 @@ func (a *App) CreateDirectory(dirPath string) (FileInfo, error) {
 func (a *App) OpenFile(filePath string) error {
 	return open.Start(filePath)
 }
+
+
+func (a *App) Exit() {
+	os.Exit(0)
+}
+
+
