@@ -1563,16 +1563,9 @@ viewDestination model =
 
 viewSourceSubdirectories : Model -> Html Msg
 viewSourceSubdirectories model =
-    let
-        currentDirName =
-            String.split model.pathSeparator model.sourceDirectoryPath
-                |> List.Extra.last
-                -- FIXME : does it work in root dir?
-                |> Maybe.withDefault "Error: cannot get current dir name"
-    in
     div [ class "panel" ]
         [ div [ class <| "panel-header" ++ additionalHeaderClass model LeftSide ]
-            [ h2 [] [ text <| "Source directory: " ++ currentDirName ]
+            [ h2 [] [ text <| "Source directory: " ++ truncatePath model.sourceDirectoryPath ]
             , span []
                 [ button
                     [ class "btn"
@@ -1621,11 +1614,6 @@ viewEditedDirectoryName model =
 viewDestinationSubdirectories : Model -> Html Msg
 viewDestinationSubdirectories model =
     let
-        currentDirName =
-            String.split model.pathSeparator model.destinationDirectoryPath
-                |> List.Extra.last
-                |> Maybe.withDefault "Error: cannot get current dir name"
-
         newDirEditor =
             if model.isCreatingDirectory then
                 [ viewEditedDirectoryName model ]
@@ -1635,7 +1623,7 @@ viewDestinationSubdirectories model =
     in
     div [ class "panel" ]
         [ div [ class <| "panel-header" ++ additionalHeaderClass model RightSide ]
-            [ h2 [] [ text <| "Destination directory: " ++ currentDirName ]
+            [ h2 [] [ text <| "Destination directory: " ++ truncatePath model.destinationDirectoryPath ]
             , span []
                 [ button
                     [ class "btn"
@@ -1938,3 +1926,20 @@ viewFocusedZone model =
 
             ErrorMessage ->
                 "ErrorMessage"
+
+
+maxVisiblePathLength =
+    45
+
+
+truncatePath : String -> String
+truncatePath fullPath =
+    let
+        actualLength =
+            String.length fullPath
+    in
+    if actualLength > maxVisiblePathLength then
+        "..." ++ String.dropLeft (actualLength - maxVisiblePathLength) fullPath
+
+    else
+        fullPath
