@@ -675,7 +675,7 @@ update msg model =
             )
 
         UserSubmittedDirName ->
-            if model.isCreatingDirectory then
+            if model.isCreatingDirectory && model.editedDirName /= "" then
                 createNewDirectory model
 
             else
@@ -685,9 +685,12 @@ update msg model =
             let
                 isConflicting =
                     List.any (\f -> f.name == model.editedFileName) model.sourceDirectoryFiles
+
+                isNameEmpty =
+                    String.isEmpty model.editedFileName
             in
-            case ( model.editedFile, isConflicting ) of
-                ( Just file, False ) ->
+            case ( model.editedFile, isConflicting, isNameEmpty ) of
+                ( Just file, False, False ) ->
                     let
                         renaming =
                             { file = { file | name = model.editedFileName }
@@ -698,7 +701,7 @@ update msg model =
                     , applyRenaming model [ renaming ]
                     )
 
-                ( Just _, True ) ->
+                ( Just _, True, False ) ->
                     ( { model
                         | error = Just ("A file with the name " ++ model.editedFileName ++ " already exists in the source directory")
                         , focusedZone = ErrorMessage
@@ -706,7 +709,7 @@ update msg model =
                     , focusOn "close-error" NoOp
                     )
 
-                ( Nothing, _ ) ->
+                _ ->
                     ( model, Cmd.none )
 
 
