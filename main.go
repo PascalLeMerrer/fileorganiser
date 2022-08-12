@@ -24,14 +24,14 @@ func main() {
 	// Create application with options
 	err := wails.Run(&options.App{
 		Title:             "File Organizer",
-		Width:             1024,
+		Width:             1280,
 		Height:            768,
-		MinWidth:          1024,
+		MinWidth:          1280,
 		MinHeight:         768,
 		MaxWidth:          2560,
 		MaxHeight:         1600,
 		DisableResize:     false,
-		Fullscreen:        true,
+		Fullscreen:        false,
 		Frameless:         false,
 		StartHidden:       false,
 		HideWindowOnClose: false,
@@ -53,7 +53,7 @@ func main() {
 			WebviewIsTransparent: false,
 			WindowIsTranslucent:  false,
 			DisableWindowIcon:    false,
-			// DisableFramelessWindowDecorations: false,
+			DisableFramelessWindowDecorations: false,
 			WebviewUserDataPath: "",
 		},
 		// Mac platform specific options
