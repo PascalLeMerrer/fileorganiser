@@ -734,7 +734,7 @@ toggleSelectionStatus file =
             { file | status = Selected }
 
         Edited ->
-            file
+            { file | status = Selected }
 
         SelectedForDeletion ->
             -- TODO  Remove from the list of files selected for deletion
@@ -1245,7 +1245,26 @@ processKeyboardShortcut model target event =
         DirNameEditor ->
             case event.keyCode of
                 Key.Escape ->
-                    ( { model | isCreatingDirectory = False, editedDirName = "" }, Cmd.none )
+                    { model | isCreatingDirectory = False, editedDirName = "" }
+                        |> restoreFocus
+
+                _ ->
+                    ( model, Cmd.none )
+
+        FileNameEditor ->
+            case event.keyCode of
+                Key.Escape ->
+                    let
+                        sourceDirectoryFiles =
+                            model.sourceDirectoryFiles
+                                |> List.Extra.updateIf (\f -> f.status == Edited) (\f -> { f | status = Selected })
+                    in
+                    { model
+                        | editedFile = Nothing
+                        , editedFileName = ""
+                        , sourceDirectoryFiles = sourceDirectoryFiles
+                    }
+                        |> restoreFocus
 
                 _ ->
                     ( model, Cmd.none )
@@ -1604,7 +1623,7 @@ viewEditedDirectoryName model =
             , id "dirname-input"
             , onInput UserModifiedDirName
             , onFocus (UserChangedFocusedZone DirNameEditor)
-            , Events.on "keydown" (simpleKeyDecoder Source)
+            , Events.on "keydown" (simpleKeyDecoder Destination)
             , value model.editedDirName
             ]
             []
@@ -1789,6 +1808,7 @@ viewEditedFilename model =
             , id "filename-input"
             , onInput UserModifiedFileName
             , onFocus (UserChangedFocusedZone FileNameEditor)
+            , Events.on "keydown" (simpleKeyDecoder Source)
             , value model.editedFileName
             ]
             []
