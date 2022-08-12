@@ -1681,11 +1681,14 @@ viewSourceFiles : Model -> Html Msg
 viewSourceFiles model =
     let
         count =
-            List.length model.sourceDirectoryFiles |> String.fromInt
+            List.length model.sourceDirectoryFiles
+
+        countAsString =
+            String.fromInt count
     in
     div [ class "panel" ]
         [ div [ class <| "panel-header" ++ additionalHeaderClass model LeftSide ]
-            [ h2 [] [ text <| count ++ " files in source directory" ]
+            [ h2 [] [ text <| countAsString ++ inflect count ++ " in source directory" ]
             , div [ class "search-form" ]
                 [ input
                     [ class "input"
@@ -1727,11 +1730,14 @@ viewDestinationFiles : Model -> Html Msg
 viewDestinationFiles model =
     let
         count =
-            List.length model.destinationDirectoryFiles |> String.fromInt
+            List.length model.destinationDirectoryFiles
+
+        countAsString =
+            String.fromInt count
     in
     div [ class "panel" ]
         [ div [ class <| "panel-header" ++ additionalHeaderClass model RightSide ]
-            [ h2 [] [ text <| count ++ " files in destination directory" ]
+            [ h2 [] [ text <| countAsString ++ inflect count ++ " in destination directory" ]
             ]
         , div
             [ class "panel-content" ]
@@ -1740,6 +1746,15 @@ viewDestinationFiles model =
                 |> List.map (viewFile model UserClickedDestinationFile False)
             )
         ]
+
+
+inflect : Int -> String
+inflect count =
+    if count > 1 then
+        " files"
+
+    else
+        " file"
 
 
 viewFile : Model -> (File -> Msg) -> Bool -> File -> Html Msg
