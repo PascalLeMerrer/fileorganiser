@@ -294,8 +294,8 @@ type Msg
     | UserModifiedFileName String
     | UserModifiedDirName String
     | UserPressedKey Target KeyboardEvent
-    | UserValidatedDirName
-    | UserValidatedFilename
+    | UserSubmittedDirName
+    | UserSubmittedFilename
 
 
 type Target
@@ -674,14 +674,14 @@ update msg model =
             , applyRenaming model renamings
             )
 
-        UserValidatedDirName ->
+        UserSubmittedDirName ->
             if model.isCreatingDirectory then
                 createNewDirectory model
 
             else
                 ( model, Cmd.none )
 
-        UserValidatedFilename ->
+        UserSubmittedFilename ->
             let
                 isConflicting =
                     List.any (\f -> f.name == model.editedFileName) model.sourceDirectoryFiles
@@ -1602,7 +1602,7 @@ additionalHeaderClass model zone =
 
 viewEditedDirectoryName : Model -> Html Msg
 viewEditedDirectoryName model =
-    form [ onSubmit UserValidatedDirName ]
+    form [ onSubmit UserSubmittedDirName ]
         [ input
             [ class "file-input"
             , id "dirname-input"
@@ -1792,7 +1792,7 @@ viewReadOnlyFile model onClickMsg canBeSearchedAndReplaced file =
 
 viewEditedFilename : Model -> Html Msg
 viewEditedFilename model =
-    form [ onSubmit UserValidatedFilename ]
+    form [ onSubmit UserSubmittedFilename ]
         [ input
             [ class "file-input"
             , id "filename-input"
