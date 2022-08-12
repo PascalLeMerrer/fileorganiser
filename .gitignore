@@ -4,3 +4,4 @@ build/bin
 frontend/src/elm.js
 frontend/wailsjs/go/main/*
 tmp*
+elm/node_modules
