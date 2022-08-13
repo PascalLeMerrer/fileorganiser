@@ -1495,61 +1495,9 @@ decodeFile msg value =
 view : Model -> Html Msg
 view model =
     div [ class "app", id "app" ]
-        [ viewHeader model
-        , viewLeftSide model
+        [ viewLeftSide model
         , viewRightSide model
         , viewFooter model
-        ]
-
-
-viewHeader : Model -> Html Msg
-viewHeader model =
-    header [ tabindex 0 ]
-        [ div
-            [ class "input-box"
-            ]
-            [ input
-                [ class "input"
-                , type_ "text"
-                , id "filtering-left"
-                , onInput UserChangedSourceFilter
-                , onFocus (UserChangedFocusedZone Filtering)
-                , value model.sourceFilter
-                , placeholder "Enter one or more words to filter source files"
-                ]
-                []
-            , button [ class "btn", onClick UserClickedClearSourceFilter ] [ text "Clear" ]
-            ]
-        , div []
-            [ button [ class "btn link", onClick UserClickedSynchronizeButton ]
-                [ if model.areFilterSynchronized then
-                    text "Unlink"
-
-                  else
-                    text "Link"
-                ]
-            ]
-        , div
-            [ class "input-box"
-            ]
-            [ input
-                [ class "input"
-                , type_ "text"
-                , id "filtering-right"
-                , onInput UserChangedDestinationFilter
-                , onFocus (UserChangedFocusedZone Filtering)
-                , value model.destinationFilter
-                , placeholder "Enter one or more words to filter destination directories"
-                , disabled model.areFilterSynchronized
-                ]
-                []
-            , button
-                [ class "btn"
-                , onClick UserClickedClearDestinationFilter
-                , disabled model.areFilterSynchronized
-                ]
-                [ text "Clear" ]
-            ]
         ]
 
 
@@ -1713,6 +1661,7 @@ viewDestinationSubdirectories model =
                     [ text "..." ]
                 ]
             ]
+        , viewDestinationFilter model
         , div
             [ class "panel-content" ]
             (newDirEditor
@@ -1722,6 +1671,38 @@ viewDestinationSubdirectories model =
                         |> List.map (viewDirectory model UserClickedDestinationDirectory)
                    )
             )
+        ]
+
+
+viewDestinationFilter : Model -> Html Msg
+viewDestinationFilter model =
+    div
+        [ class "input-box"
+        ]
+        [ input
+            [ class "input"
+            , type_ "text"
+            , id "filtering-right"
+            , onInput UserChangedDestinationFilter
+            , onFocus (UserChangedFocusedZone Filtering)
+            , value model.destinationFilter
+            , placeholder "Enter one or more words to filter destination directories"
+            , disabled model.areFilterSynchronized
+            ]
+            []
+        , button
+            [ class "btn"
+            , onClick UserClickedClearDestinationFilter
+            , disabled model.areFilterSynchronized
+            ]
+            [ text "Clear" ]
+        , button [ class "btn link", onClick UserClickedSynchronizeButton ]
+            [ if model.areFilterSynchronized then
+                text "Unlink"
+
+              else
+                text "Link"
+            ]
         ]
 
 
@@ -1774,6 +1755,21 @@ viewSourceFiles model =
                     ]
                     [ text "Replace" ]
                 ]
+            ]
+        , div
+            [ class "input-box"
+            ]
+            [ input
+                [ class "input"
+                , type_ "text"
+                , id "filtering-left"
+                , onInput UserChangedSourceFilter
+                , onFocus (UserChangedFocusedZone Filtering)
+                , value model.sourceFilter
+                , placeholder "Enter one or more words to filter source files"
+                ]
+                []
+            , button [ class "btn", onClick UserClickedClearSourceFilter ] [ text "Clear" ]
             ]
         , div
             [ class "panel-content" ]

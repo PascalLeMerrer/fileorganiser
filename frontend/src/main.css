@@ -32,12 +32,13 @@ h2 {
 }
 
 .input-box {
-  height: 30px;
+  height: 25px;
+  min-height: 25px;
   line-height:20px;
-  flex: 1;
   display: flex;
   flex-direction: row;
   justify-content: space-between;
+  padding: 6px 10px 1px 5px;
 }
 
 .btn {
@@ -61,8 +62,8 @@ h2 {
 
 .input-box .btn {
   width: 60px;
-  height: 30px;
-  line-height: 30px;
+  height: 25px;
+  line-height: 25px;
   margin: 0 0 0 20px;
   padding: 0 8px;
 }
@@ -92,7 +93,6 @@ form {
 }
 
 .input-box .input {
-    height: 30px;
 }
 
 .file.dir {
@@ -100,6 +100,7 @@ form {
 }
 
 .input-box .input {
+  height: 25px;
   flex: 1;
   border: none;
   border-radius: 3px;
@@ -163,7 +164,7 @@ form {
 #app {
   height: 100vh;
   display: grid;
-  grid-template-rows: 80px 1fr 50px;
+  grid-template-rows: 20px 1fr 50px;
   grid-template-columns: 1fr 1fr;
 }
 
@@ -184,12 +185,12 @@ header {
   grid-column-start: 1;
   grid-column-end: 2;
   grid-row-start: 2;
-  grid-row-end: 3;
+  grid-row-end: 4;
   background: lightgrey;
   padding: 5px;
   min-height: 0; /* Prevents the grid to extend outside of the visible area */
   display: grid;
-  grid-template-rows: 1fr 3fr;
+  grid-template-rows: 2fr 4fr;
   grid-row-gap: 5px;
   outline: none;
 }
@@ -198,12 +199,12 @@ header {
   grid-column-start: 2;
   grid-column-end: 3;
   grid-row-start: 2;
-  grid-row-end: 3;
+  grid-row-end: 4;
   background: lightgrey;
   padding: 5px;
   min-height: 0; /* Prevents the grid to extend outside of the visible area */
   display: grid;
-  grid-template-rows: 1fr 3fr;
+  grid-template-rows: 2fr 4fr;
   grid-row-gap: 5px;
   outline: none;
 }
@@ -268,7 +269,7 @@ footer {
 }
 
 .btn.link {
-  margin:  0 15px 0 15px;
+  margin:  0 2px 0 10px;
 }
 
 .search-form > .btn {
