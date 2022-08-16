@@ -250,6 +250,10 @@ footer {
   font-weight: normal;
 }
 
+.panel-header.focused {
+  background-color: var(--main-color);
+}
+
 
 /* force scrollbar to be always visible on Mac OS */
 ::-webkit-scrollbar {
