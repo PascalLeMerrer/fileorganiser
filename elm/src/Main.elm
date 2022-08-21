@@ -189,7 +189,8 @@ port receiveSubDirectories : (Json.Encode.Value -> msg) -> Sub msg
 
 
 type alias Model =
-    { areFilterSynchronized : Bool
+    { applySourceFilterToDestinationDirectories : Bool
+    , applySourceFilterToDestinationFiles : Bool
     , destinationDirectoryFiles : List File
     , destinationDirectoryPath : String
     , destinationDirectoryFilter : String
@@ -218,7 +219,8 @@ type alias Model =
 
 defaultModel : Model
 defaultModel =
-    { areFilterSynchronized = False
+    { applySourceFilterToDestinationDirectories = False
+    , applySourceFilterToDestinationFiles = False
     , destinationDirectoryFiles = []
     , destinationDirectoryPath = ""
     , destinationDirectoryFilter = ""
@@ -298,7 +300,8 @@ type Msg
     | UserClickedSourceDirectory File
     | UserClickedSourceDirectoryButton
     | UserClickedSourceFile File
-    | UserClickedSynchronizeButton
+    | UserClickedSynchronizeDirFilterButton
+    | UserClickedSynchronizeFileFilterButton
     | UserChangedFocusedZone FocusedZone
     | UserModifiedFileName String
     | UserModifiedDirName String
@@ -532,7 +535,8 @@ update msg model =
         UserChangedSourceFilter filteringString ->
             ( { model | sourceFilter = filteringString }
                 |> filterSourceFiles
-                |> synchronizeFilters
+                |> synchronizeDestinationDirFilter
+                |> synchronizeDestinationFilesFilter
             , Cmd.none
             )
 
@@ -561,7 +565,7 @@ update msg model =
         UserClickedClearSourceFilter ->
             ( { model | sourceFilter = "" }
                 |> filterSourceFiles
-                |> synchronizeFilters
+                |> synchronizeDestinationDirFilter
             , Cmd.none
             )
 
@@ -683,9 +687,15 @@ update msg model =
         UserClickedReload target ->
             reload model target
 
-        UserClickedSynchronizeButton ->
-            ( { model | areFilterSynchronized = not model.areFilterSynchronized }
-                |> synchronizeFilters
+        UserClickedSynchronizeDirFilterButton ->
+            ( { model | applySourceFilterToDestinationDirectories = not model.applySourceFilterToDestinationDirectories }
+                |> synchronizeDestinationDirFilter
+            , Cmd.none
+            )
+
+        UserClickedSynchronizeFileFilterButton ->
+            ( { model | applySourceFilterToDestinationFiles = not model.applySourceFilterToDestinationFiles }
+                |> synchronizeDestinationFilesFilter
             , Cmd.none
             )
 
@@ -896,11 +906,21 @@ filterByParentPath filters file =
         List.all (\word -> String.contains (String.toLower word) lowerCaseParentPath) filters
 
 
-synchronizeFilters : Model -> Model
-synchronizeFilters model =
-    if model.areFilterSynchronized then
+synchronizeDestinationDirFilter : Model -> Model
+synchronizeDestinationDirFilter model =
+    if model.applySourceFilterToDestinationDirectories then
         { model | destinationDirectoryFilter = model.sourceFilter }
             |> filterDestinationDirectories
+
+    else
+        model
+
+
+synchronizeDestinationFilesFilter : Model -> Model
+synchronizeDestinationFilesFilter model =
+    if model.applySourceFilterToDestinationFiles then
+        { model | destinationFilesFilter = model.sourceFilter }
+            |> filterDestinationFiles
 
     else
         model
@@ -1723,17 +1743,17 @@ viewDestinationDirectoryFilter model =
             , onFocus (UserChangedFocusedZone Filtering)
             , value model.destinationDirectoryFilter
             , placeholder "Enter one or more words to filter destination directories"
-            , disabled model.areFilterSynchronized
+            , disabled model.applySourceFilterToDestinationDirectories
             ]
             []
         , button
             [ class "btn"
             , onClick UserClickedClearDestinationDirectoryFilter
-            , disabled model.areFilterSynchronized
+            , disabled model.applySourceFilterToDestinationDirectories
             ]
             [ text "Clear" ]
-        , button [ class "btn link", onClick UserClickedSynchronizeButton ]
-            [ if model.areFilterSynchronized then
+        , button [ class "btn link", onClick UserClickedSynchronizeDirFilterButton ]
+            [ if model.applySourceFilterToDestinationDirectories then
                 text "Unlink"
 
               else
@@ -1755,17 +1775,17 @@ viewDestinationFilesFilter model =
             , onFocus (UserChangedFocusedZone Filtering)
             , value model.destinationFilesFilter
             , placeholder "Enter one or more words to filter files in destination directory"
-            , disabled model.areFilterSynchronized
+            , disabled model.applySourceFilterToDestinationFiles
             ]
             []
         , button
             [ class "btn"
             , onClick UserClickedClearDestinationFilesFilter
-            , disabled model.areFilterSynchronized
+            , disabled model.applySourceFilterToDestinationFiles
             ]
             [ text "Clear" ]
-        , button [ class "btn link", onClick UserClickedSynchronizeButton ]
-            [ if model.areFilterSynchronized then
+        , button [ class "btn link", onClick UserClickedSynchronizeFileFilterButton ]
+            [ if model.applySourceFilterToDestinationFiles then
                 text "Unlink"
 
               else
