@@ -1,9 +1,9 @@
-port module Main exposing (File, FileStatus(..), FocusedZone, Model, Msg, defaultModel, filterDestinationDirectories, main)
+port module Main exposing (Command, File, FileStatus(..), FocusedZone, Model, Msg, Operation, defaultModel, filterDestinationDirectories, main)
 
 import Browser
 import Browser.Dom
 import Filesize
-import Html exposing (Html, button, div, footer, form, h2, header, input, span, text)
+import Html exposing (Html, button, div, footer, form, h2, input, span, text)
 import Html.Attributes exposing (class, disabled, id, placeholder, tabindex, type_, value)
 import Html.Events as Events exposing (onClick, onFocus, onInput, onSubmit)
 import Iso8601
@@ -22,96 +22,17 @@ import Time exposing (Month(..), Posix)
 -- antislash is doubled for escaping
 
 
-windowsPathSep : String
-windowsPathSep =
-    "\\"
+port createDirectory : String -> Cmd msg
 
 
-unixPathSep : String
-unixPathSep =
-    "/"
+port fileRemoved : (Json.Encode.Value -> msg) -> Sub msg
 
 
 
 {- Maps Golang File -}
 
 
-type alias File =
-    { isDir : Bool
-    , mode : Int
-    , modTime : Posix
-    , name : String
-    , parentPath : String
-    , satisfiesFilter : Bool
-    , size : Int
-    , status : FileStatus
-    }
-
-
-type FileStatus
-    = Unselected
-    | Edited
-    | Selected
-    | SelectedForDeletion
-
-
-fileDecoder : Decoder File
-fileDecoder =
-    Json.Decode.succeed File
-        |> required "IsDir" Json.Decode.bool
-        |> required "Mode" Json.Decode.int
-        |> required "ModTime" Iso8601.decoder
-        |> required "Name" Json.Decode.string
-        |> required "DirPath" Json.Decode.string
-        |> hardcoded False
-        |> required "Size" Json.Decode.int
-        |> hardcoded Unselected
-
-
-type Operation
-    = Move
-    | Rename
-    | Delete
-
-
-type FocusedZone
-    = Confirmation
-    | ErrorMessage
-    | Filtering
-    | LeftSide
-    | FileNameEditor
-    | DirNameEditor
-    | RightSide
-    | SourceSearchReplace
-
-
-type alias Command =
-    { operation : Operation
-    , files : List File -- the files / dirs affected by the operation
-    , destination : Maybe String -- destination dir if any FIXME this is a bad design; try to create specific commands instead
-    , source : Maybe String -- source dir if any FIXME this is a bad design; try to create specific commands instead
-    }
-
-
-
--- MAIN
-
-
-main : Program () Model Msg
-main =
-    Browser.element
-        { init = init
-        , update = update
-        , view = view
-        , subscriptions = subscriptions
-        }
-
-
-
--- OUTPUT PORTS
-
-
-port createDirectory : String -> Cmd msg
+port filesRenamed : (Json.Encode.Value -> msg) -> Sub msg
 
 
 port getCurrentDirectoryPath : () -> Cmd msg
@@ -120,41 +41,27 @@ port getCurrentDirectoryPath : () -> Cmd msg
 port getDestinationDirectoryFiles : String -> Cmd msg
 
 
-port getSourceDirectoryContent : String -> Cmd msg
-
-
 port getDestinationSubdirectories : String -> Cmd msg
+
+
+port getSourceDirectoryContent : String -> Cmd msg
 
 
 port moveFiles : ( List String, String ) -> Cmd msg
 
 
+
+-- MAIN
+
+
 port openFile : String -> Cmd msg
 
 
+
+-- OUTPUT PORTS
+
+
 port quit : () -> Cmd msg
-
-
-port removeFile : Json.Encode.Value -> Cmd msg
-
-
-port renameFiles : List Json.Encode.Value -> Cmd msg
-
-
-port selectDestinationDirectory : String -> Cmd msg
-
-
-port selectSourceDirectory : String -> Cmd msg
-
-
-
--- INPUT PORTS
-
-
-port filesRenamed : (Json.Encode.Value -> msg) -> Sub msg
-
-
-port fileRemoved : (Json.Encode.Value -> msg) -> Sub msg
 
 
 port receiveCreatedDirectory : (Json.Encode.Value -> msg) -> Sub msg
@@ -184,8 +91,58 @@ port receiveSourceDirectoryContent : (Json.Encode.Value -> msg) -> Sub msg
 port receiveSubDirectories : (Json.Encode.Value -> msg) -> Sub msg
 
 
+port removeFile : Json.Encode.Value -> Cmd msg
 
--- MODEL
+
+port renameFiles : List Json.Encode.Value -> Cmd msg
+
+
+
+-- INPUT PORTS
+
+
+port selectDestinationDirectory : String -> Cmd msg
+
+
+port selectSourceDirectory : String -> Cmd msg
+
+
+type alias Command =
+    { operation : Operation
+    , files : List File -- the files / dirs affected by the operation
+    , destination : Maybe String -- destination dir if any FIXME this is a bad design; try to create specific commands instead
+    , source : Maybe String -- source dir if any FIXME this is a bad design; try to create specific commands instead
+    }
+
+
+type alias File =
+    { isDir : Bool
+    , mode : Int
+    , modTime : Posix
+    , name : String
+    , parentPath : String
+    , satisfiesFilter : Bool
+    , size : Int
+    , status : FileStatus
+    }
+
+
+type FileStatus
+    = Unselected
+    | Edited
+    | Selected
+    | SelectedForDeletion
+
+
+type FocusedZone
+    = Confirmation
+    | ErrorMessage
+    | Filtering
+    | LeftSide
+    | FileNameEditor
+    | DirNameEditor
+    | RightSide
+    | SourceSearchReplace
 
 
 type alias Model =
@@ -214,56 +171,6 @@ type alias Model =
     , sourceSearch : String
     , sourceSubDirectories : List File
     , timezone : Time.Zone
-    }
-
-
-defaultModel : Model
-defaultModel =
-    { applySourceFilterToDestinationDirectories = False
-    , applySourceFilterToDestinationFiles = False
-    , destinationDirectoryFiles = []
-    , destinationDirectoryPath = ""
-    , destinationDirectoryFilter = ""
-    , destinationFilesFilter = ""
-    , destinationSubdirectories = []
-    , editedDirName = ""
-    , editedFile = Nothing
-    , editedFileName = ""
-    , error = Nothing
-    , filesToDelete = []
-    , focusedZone = LeftSide
-    , history = []
-    , isCreatingDirectory = False
-    , isUndoing = False
-    , pathSeparator = unixPathSep
-    , previousFocusedZone = LeftSide
-    , sourceDirectoryFiles = []
-    , sourceDirectoryPath = "."
-    , sourceFilter = ""
-    , sourceReplace = ""
-    , sourceSearch = ""
-    , sourceSubDirectories = []
-    , timezone = Time.utc
-    }
-
-
-init : () -> ( Model, Cmd Msg )
-init _ =
-    ( defaultModel
-    , Cmd.batch
-        [ Task.perform AdjustTimeZone Time.here
-        , getCurrentDirectoryPath ()
-        ]
-    )
-
-
-
--- UPDATE
-
-
-type alias Renaming =
-    { file : File
-    , originalPath : String
     }
 
 
@@ -310,14 +217,946 @@ type Msg
     | UserSubmittedFilename
 
 
+type Operation
+    = Move
+    | Rename
+
+
+defaultModel : Model
+defaultModel =
+    { applySourceFilterToDestinationDirectories = False
+    , applySourceFilterToDestinationFiles = False
+    , destinationDirectoryFiles = []
+    , destinationDirectoryPath = ""
+    , destinationDirectoryFilter = ""
+    , destinationFilesFilter = ""
+    , destinationSubdirectories = []
+    , editedFile = Nothing
+    , editedDirName = ""
+    , editedFileName = ""
+    , error = Nothing
+    , filesToDelete = []
+    , focusedZone = LeftSide
+    , history = []
+    , isCreatingDirectory = False
+    , isUndoing = False
+    , previousFocusedZone = LeftSide
+    , pathSeparator = unixPathSep
+    , sourceDirectoryFiles = []
+    , sourceDirectoryPath = "."
+    , sourceFilter = ""
+    , sourceReplace = ""
+    , sourceSearch = ""
+    , sourceSubDirectories = []
+    , timezone = Time.utc
+    }
+
+
+filterDestinationDirectories : Model -> Model
+filterDestinationDirectories model =
+    let
+        words : List String
+        words =
+            String.words model.destinationDirectoryFilter
+    in
+    case words of
+        [] ->
+            { model
+                | destinationSubdirectories =
+                    List.map (\f -> { f | satisfiesFilter = True })
+                        model.destinationSubdirectories
+            }
+
+        _ ->
+            { model
+                | destinationSubdirectories =
+                    List.map (\f -> { f | satisfiesFilter = filterByName words f || filterByParentPath words f })
+                        model.destinationSubdirectories
+            }
+
+
+
+-- MODEL
+
+
+main : Program () Model Msg
+main =
+    Browser.element
+        { init = init
+        , subscriptions = subscriptions
+        , update = update
+        , view = view
+        }
+
+
+additionalHeaderClass : Model -> FocusedZone -> String
+additionalHeaderClass model zone =
+    if model.focusedZone == zone then
+        " focused"
+
+    else
+        " unfocused"
+
+
+applyRenaming : Model -> List Renaming -> Cmd Msg
+applyRenaming model renamings =
+    let
+        encodedRenamings : List Json.Encode.Value
+        encodedRenamings =
+            renamings
+                |> List.map
+                    (\renaming ->
+                        Json.Encode.object
+                            [ ( "oldName"
+                              , renaming.file.parentPath
+                                    ++ model.pathSeparator
+                                    ++ renaming.originalPath
+                                    |> Json.Encode.string
+                              )
+                            , ( "newName"
+                              , renaming.file.parentPath
+                                    ++ model.pathSeparator
+                                    ++ renaming.file.name
+                                    |> Json.Encode.string
+                              )
+                            ]
+                    )
+    in
+    renameFiles encodedRenamings
+
+
+
+-- UPDATE
+
+
+changeAllFileStatus : Model -> Target -> FileStatus -> ( Model, Cmd Msg )
+changeAllFileStatus model target status =
+    case target of
+        Source ->
+            let
+                updatedFiles : List File
+                updatedFiles =
+                    model.sourceDirectoryFiles
+                        |> List.map
+                            (\f ->
+                                if f.satisfiesFilter then
+                                    { f | status = status }
+
+                                else
+                                    f
+                            )
+            in
+            ( { model
+                | sourceDirectoryFiles = updatedFiles
+              }
+                |> filterSourceFiles
+            , Cmd.none
+            )
+
+        Destination ->
+            let
+                updatedFiles : List File
+                updatedFiles =
+                    model.destinationDirectoryFiles
+                        |> List.map
+                            (\f -> { f | status = status })
+            in
+            ( { model
+                | destinationDirectoryFiles = updatedFiles
+              }
+            , Cmd.none
+            )
+
+
+changeStatusOfSelectedDestinationFiles : FileStatus -> Model -> Model
+changeStatusOfSelectedDestinationFiles fileStatus model =
+    { model
+        | destinationDirectoryFiles =
+            List.map
+                (\file ->
+                    if file.status == Selected then
+                        { file | status = fileStatus }
+
+                    else
+                        file
+                )
+                model.destinationDirectoryFiles
+    }
+
+
+changeStatusOfSelectedSourceFiles : FileStatus -> Model -> Model
+changeStatusOfSelectedSourceFiles fileStatus model =
+    { model
+        | sourceDirectoryFiles =
+            List.map
+                (\file ->
+                    if file.satisfiesFilter && file.status == Selected then
+                        { file | status = fileStatus }
+
+                    else
+                        file
+                )
+                model.sourceDirectoryFiles
+    }
+        |> filterSourceFiles
+
+
+createNewDirectory : Model -> ( Model, Cmd Msg )
+createNewDirectory model =
+    let
+        dirPath : String
+        dirPath =
+            model.destinationDirectoryPath
+                ++ model.pathSeparator
+                ++ model.editedDirName
+    in
+    ( model, createDirectory dirPath )
+
+
+decodeFile : (File -> Msg) -> Json.Encode.Value -> Msg
+decodeFile msg value =
+    let
+        decodedFile : Result Json.Decode.Error File
+        decodedFile =
+            Json.Decode.decodeValue fileDecoder value
+    in
+    case decodedFile of
+        Ok file ->
+            msg file
+
+        Err error ->
+            BackendReturnedError (Json.Decode.errorToString error)
+
+
+decodeFileList : (List File -> Msg) -> Json.Encode.Value -> Msg
+decodeFileList msg value =
+    let
+        decodedFiles : Result Json.Decode.Error (List File)
+        decodedFiles =
+            Json.Decode.decodeValue (list fileDecoder) value
+    in
+    case decodedFiles of
+        Ok fileList ->
+            msg fileList
+
+        Err error ->
+            BackendReturnedError (Json.Decode.errorToString error)
+
+
+decodeFileWithPreviousName : (File -> String -> Msg) -> Json.Encode.Value -> Msg
+decodeFileWithPreviousName msg value =
+    let
+        decodedFile : Result Json.Decode.Error File
+        decodedFile =
+            Json.Decode.decodeValue fileDecoder value
+
+        decodedPreviousName : Result Json.Decode.Error String
+        decodedPreviousName =
+            Json.Decode.decodeValue (Json.Decode.field "PreviousName" Json.Decode.string) value
+    in
+    case ( decodedFile, decodedPreviousName ) of
+        ( Ok file, Ok previousName ) ->
+            msg file previousName
+
+        ( Ok file, Err _ ) ->
+            msg file ""
+
+        ( Err error, _ ) ->
+            BackendReturnedError (Json.Decode.errorToString error)
+
+
+decodeRenamingList : (List File -> List String -> Msg) -> Json.Encode.Value -> Msg
+decodeRenamingList msg value =
+    let
+        decodedFiles : Result Json.Decode.Error (List File)
+        decodedFiles =
+            Json.Decode.decodeValue (list fileDecoder) value
+
+        decodedOriginalPaths : Result Json.Decode.Error (List String)
+        decodedOriginalPaths =
+            Json.Decode.decodeValue (list <| Json.Decode.field "PreviousName" Json.Decode.string) value
+    in
+    case ( decodedFiles, decodedOriginalPaths ) of
+        ( Ok fileList, Ok originalPaths ) ->
+            msg fileList originalPaths
+
+        ( Err error, _ ) ->
+            BackendReturnedError (Json.Decode.errorToString error)
+
+        ( _, Err error ) ->
+            BackendReturnedError (Json.Decode.errorToString error)
+
+
+fileDecoder : Decoder File
+fileDecoder =
+    Json.Decode.succeed File
+        |> required "IsDir" Json.Decode.bool
+        |> required "Mode" Json.Decode.int
+        |> required "ModTime" Iso8601.decoder
+        |> required "Name" Json.Decode.string
+        |> required "DirPath" Json.Decode.string
+        |> hardcoded False
+        |> required "Size" Json.Decode.int
+        |> hardcoded Unselected
+
+
+filterByName : List String -> File -> Bool
+filterByName filters file =
+    if file.name == ".." then
+        True
+
+    else
+        let
+            lowerCaseFilename : String
+            lowerCaseFilename =
+                String.toLower file.name
+        in
+        List.all (\word -> String.contains (String.toLower word) lowerCaseFilename) filters
+
+
+filterByParentPath : List String -> File -> Bool
+filterByParentPath filters file =
+    if file.name == ".." then
+        True
+
+    else
+        let
+            lowerCaseParentPath : String
+            lowerCaseParentPath =
+                String.toLower file.parentPath
+        in
+        List.all (\word -> String.contains (String.toLower word) lowerCaseParentPath) filters
+
+
+filterDestinationFiles : Model -> Model
+filterDestinationFiles model =
+    let
+        words : List String
+        words =
+            String.words model.destinationFilesFilter
+    in
+    case words of
+        [] ->
+            { model
+                | destinationDirectoryFiles = List.map (\f -> { f | satisfiesFilter = True }) model.destinationDirectoryFiles
+            }
+
+        _ ->
+            { model
+                | destinationDirectoryFiles =
+                    List.map (\f -> { f | satisfiesFilter = filterByName words f }) model.destinationDirectoryFiles
+            }
+
+
+filterSelectedFiles : List File -> List File
+filterSelectedFiles files =
+    List.filter (\f -> f.satisfiesFilter && f.status == Selected) files
+
+
+filterSourceFiles : Model -> Model
+filterSourceFiles model =
+    let
+        words : List String
+        words =
+            String.words model.sourceFilter
+    in
+    case words of
+        [] ->
+            { model
+                | sourceDirectoryFiles = List.map (\f -> { f | satisfiesFilter = True }) model.sourceDirectoryFiles
+            }
+
+        _ ->
+            { model
+                | sourceDirectoryFiles =
+                    List.map (\f -> { f | satisfiesFilter = filterByName words f }) model.sourceDirectoryFiles
+            }
+
+
+{-| Sets focus on an HTML element, then sends a msg when done (even if the element is not found)
+-}
+focusOn : String -> msg -> Cmd msg
+focusOn elementId msg =
+    Browser.Dom.focus elementId |> Task.attempt (\_ -> msg)
+
+
+highlight : String -> String -> List (Html Msg)
+highlight =
+    Mark.markWith { defaultOptions | minTermLength = 1 }
+
+
+
+-- TODO allow renaming destination files
+
+
+inflect : Int -> String
+inflect count =
+    if count > 1 then
+        " files"
+
+    else
+        " file"
+
+
+init : () -> ( Model, Cmd Msg )
+init _ =
+    ( defaultModel
+    , Cmd.batch
+        [ Task.perform AdjustTimeZone Time.here
+        , getCurrentDirectoryPath ()
+        ]
+    )
+
+
+keyDecoderPreventingDefault : Target -> Json.Decode.Decoder ( Msg, Bool )
+keyDecoderPreventingDefault target =
+    decodeKeyboardEvent
+        |> Json.Decode.map
+            (\key ->
+                ( UserPressedKey target key, True )
+            )
+
+
+maxVisiblePathLength : number
+maxVisiblePathLength =
+    45
+
+
+moveSelectedFiles : Model -> ( Model, Cmd Msg )
+moveSelectedFiles model =
+    let
+        ( filesToMove, destination ) =
+            case model.focusedZone of
+                RightSide ->
+                    ( model.destinationDirectoryFiles
+                        |> List.filter (\f -> f.status == Selected)
+                        |> List.map (\file -> file.parentPath ++ model.pathSeparator ++ file.name)
+                    , model.sourceDirectoryPath
+                    )
+
+                _ ->
+                    ( model.sourceDirectoryFiles
+                        |> filterSelectedFiles
+                        |> List.map (\file -> file.parentPath ++ model.pathSeparator ++ file.name)
+                    , model.destinationDirectoryPath
+                    )
+    in
+    ( model
+    , moveFiles ( filesToMove, destination )
+    )
+
+
+nameReplacement : String -> String -> File -> Maybe Renaming
+nameReplacement before after file =
+    if file.satisfiesFilter && String.contains before file.name then
+        Just
+            { file = { file | name = String.replace before after file.name }
+
+            -- TODO prepend with the source dir?
+            , originalPath = file.name
+            }
+
+    else
+        Nothing
+
+
+openSelectedFile : Model -> Target -> ( Model, Cmd Msg )
+openSelectedFile model target =
+    let
+        fileToOpen : Maybe File
+        fileToOpen =
+            case target of
+                Source ->
+                    model.sourceDirectoryFiles
+                        |> List.Extra.find (\f -> f.satisfiesFilter && f.status == Selected)
+
+                Destination ->
+                    model.destinationDirectoryFiles
+                        |> List.Extra.find (\f -> f.status == Selected)
+    in
+    case fileToOpen of
+        Just file ->
+            ( model, openFile <| file.parentPath ++ model.pathSeparator ++ file.name )
+
+        Nothing ->
+            ( model, Cmd.none )
+
+
+openSelectedFolder : Model -> Target -> ( Model, Cmd Msg )
+openSelectedFolder model target =
+    let
+        folderToOpen : String
+        folderToOpen =
+            case target of
+                Source ->
+                    model.sourceDirectoryPath
+
+                Destination ->
+                    model.destinationDirectoryPath
+    in
+    ( model, openFile folderToOpen )
+
+
+parentDir : Model -> String -> String
+parentDir model path =
+    let
+        index : Int
+        index =
+            String.indexes model.pathSeparator path
+                |> List.Extra.last
+                |> Maybe.withDefault (String.length path)
+    in
+    String.slice 0 index path
+
+
+prepareSelectedFilesForRemoval : Model -> ( Model, Cmd Msg )
+prepareSelectedFilesForRemoval model =
+    case model.focusedZone of
+        LeftSide ->
+            ( { model
+                | filesToDelete = filterSelectedFiles model.sourceDirectoryFiles
+                , focusedZone = Confirmation
+                , previousFocusedZone = model.focusedZone
+              }
+                |> changeStatusOfSelectedSourceFiles SelectedForDeletion
+            , focusOn "delete-button" NoOp
+            )
+
+        RightSide ->
+            ( { model
+                | filesToDelete =
+                    model.destinationDirectoryFiles
+                        |> List.filter (\f -> f.status == Selected)
+                , focusedZone = Confirmation
+                , previousFocusedZone = model.focusedZone
+              }
+                |> changeStatusOfSelectedDestinationFiles SelectedForDeletion
+            , focusOn "delete-button" NoOp
+            )
+
+        _ ->
+            ( model, Cmd.none )
+
+
+processConfirmationShortcuts : Model -> KeyboardEvent -> ( Model, Cmd Msg )
+processConfirmationShortcuts model event =
+    case ( event.keyCode, event.ctrlKey, event.metaKey ) of
+        ( Key.Escape, False, False ) ->
+            ( { model | filesToDelete = [], focusedZone = LeftSide }
+            , focusOn "container-left" NoOp
+            )
+
+        ( Key.Enter, False, False ) ->
+            removeSelectedFiles model
+
+        _ ->
+            ( model, Cmd.none )
+
+
+processKeyboardShortcut : Model -> Target -> KeyboardEvent -> ( Model, Cmd Msg )
+processKeyboardShortcut model target event =
+    case model.focusedZone of
+        Confirmation ->
+            processConfirmationShortcuts model event
+
+        LeftSide ->
+            processMainShortcuts model target event
+
+        FileNameEditor ->
+            case event.keyCode of
+                Key.Escape ->
+                    let
+                        sourceDirectoryFiles : List File
+                        sourceDirectoryFiles =
+                            model.sourceDirectoryFiles
+                                |> List.Extra.updateIf (\f -> f.status == Edited) (\f -> { f | status = Selected })
+                    in
+                    { model
+                        | editedFile = Nothing
+                        , editedFileName = ""
+                        , sourceDirectoryFiles = sourceDirectoryFiles
+                    }
+                        |> restoreFocus
+
+                _ ->
+                    ( model, Cmd.none )
+
+        DirNameEditor ->
+            case event.keyCode of
+                Key.Escape ->
+                    { model | editedDirName = "", isCreatingDirectory = False }
+                        |> restoreFocus
+
+                _ ->
+                    ( model, Cmd.none )
+
+        RightSide ->
+            processMainShortcuts model target event
+
+        _ ->
+            ( model, Cmd.none )
+
+
+processMainShortcuts : Model -> Target -> KeyboardEvent -> ( Model, Cmd Msg )
+processMainShortcuts model target event =
+    if event.ctrlKey || event.metaKey then
+        case ( event.keyCode, event.shiftKey ) of
+            ( Key.A, True ) ->
+                changeAllFileStatus model target Unselected
+
+            ( Key.A, False ) ->
+                changeAllFileStatus model target Selected
+
+            ( Key.R, False ) ->
+                reload model target
+
+            ( Key.Z, False ) ->
+                undo model
+
+            ( Key.Backspace, False ) ->
+                prepareSelectedFilesForRemoval model
+
+            _ ->
+                ( model, Cmd.none )
+
+    else if event.altKey then
+        case event.keyCode of
+            Key.F4 ->
+                ( model, quit () )
+
+            _ ->
+                ( model, Cmd.none )
+
+    else
+        case ( event.keyCode, event.shiftKey ) of
+            ( Key.F, False ) ->
+                openSelectedFolder model target
+
+            ( Key.M, False ) ->
+                moveSelectedFiles model
+
+            ( Key.N, False ) ->
+                showDirNameEditor model target
+
+            ( Key.O, False ) ->
+                openSelectedFile model target
+
+            ( Key.R, False ) ->
+                renameSelectedSourceFile model
+
+            ( Key.U, False ) ->
+                undo model
+
+            ( Key.Delete, False ) ->
+                prepareSelectedFilesForRemoval model
+
+            ( Key.F2, False ) ->
+                renameSelectedSourceFile model
+
+            ( Key.F5, False ) ->
+                reload model target
+
+            _ ->
+                ( model, Cmd.none )
+
+
+reload : Model -> Target -> ( Model, Cmd Msg )
+reload model target =
+    case target of
+        Source ->
+            ( model
+            , getSourceDirectoryContent model.sourceDirectoryPath
+            )
+
+        Destination ->
+            ( model
+            , Cmd.batch
+                [ getDestinationSubdirectories model.destinationDirectoryPath
+                , getDestinationDirectoryFiles model.destinationDirectoryPath
+                ]
+            )
+
+
+removeSelectedFiles : Model -> ( Model, Cmd Msg )
+removeSelectedFiles model =
+    let
+        commands : List (Cmd msg)
+        commands =
+            model.filesToDelete
+                |> List.map
+                    (\file ->
+                        removeFile <|
+                            Json.Encode.string <|
+                                file.parentPath
+                                    ++ model.pathSeparator
+                                    ++ file.name
+                    )
+    in
+    ( { model
+        | filesToDelete = []
+        , focusedZone = LeftSide
+      }
+    , Cmd.batch
+        (focusOn "container-left" NoOp :: commands)
+    )
+
+
+renameSelectedSourceFile : Model -> ( Model, Cmd Msg )
+renameSelectedSourceFile model =
+    let
+        fileToEdit : Maybe File
+        fileToEdit =
+            model.sourceDirectoryFiles
+                |> List.Extra.find (\f -> f.satisfiesFilter && f.status == Selected)
+    in
+    case fileToEdit of
+        Just file ->
+            let
+                sourceDirectoryFiles : List File
+                sourceDirectoryFiles =
+                    model.sourceDirectoryFiles
+                        |> List.Extra.updateIf (\f -> f == file) (\f -> { f | status = Edited })
+            in
+            ( { model
+                | editedFile = Just file
+                , editedFileName = file.name
+                , sourceDirectoryFiles = sourceDirectoryFiles
+              }
+            , focusOn "filename-input" NoOp
+            )
+
+        Nothing ->
+            ( model, Cmd.none )
+
+
+type alias Renaming =
+    { file : File
+    , originalPath : String
+    }
+
+
+restoreFocus : Model -> ( Model, Cmd Msg )
+restoreFocus model =
+    ( { model | focusedZone = model.previousFocusedZone }
+    , focusOn
+        (case model.previousFocusedZone of
+            Confirmation ->
+                "delete-button"
+
+            ErrorMessage ->
+                "close-error"
+
+            Filtering ->
+                -- TODO handle filtering right
+                "filtering-left"
+
+            LeftSide ->
+                "container-left"
+
+            FileNameEditor ->
+                "filename-input"
+
+            DirNameEditor ->
+                "dirname-input"
+
+            RightSide ->
+                "container-right"
+
+            SourceSearchReplace ->
+                "search-left"
+        )
+        NoOp
+    )
+
+
+showDirNameEditor : Model -> Target -> ( Model, Cmd Msg )
+showDirNameEditor model target =
+    case target of
+        Source ->
+            ( model, Cmd.none )
+
+        Destination ->
+            ( { model
+                | isCreatingDirectory = True
+              }
+            , focusOn "dirname-input" NoOp
+            )
+
+
+simpleKeyDecoder : Target -> Json.Decode.Decoder Msg
+simpleKeyDecoder target =
+    decodeKeyboardEvent
+        |> Json.Decode.map
+            (\key ->
+                UserPressedKey target key
+            )
+
+
+
+-- SUBSCRIPTIONS
+
+
+subscriptions : Model -> Sub Msg
+subscriptions _ =
+    Sub.batch
+        [ fileRemoved (decodeFileWithPreviousName BackendReturnedRemovedFile)
+        , filesRenamed (decodeRenamingList BackendReturnedRenamedFiles)
+        , receiveCreatedDirectory (decodeFile BackendReturnedCreatedDirectory)
+        , receiveCurrentDirectoryPath BackendReturnedCurrentDirPath
+        , receiveSourceDirectoryContent (decodeFileList BackendReturnedSourceDirectoryContent)
+        , receiveDestinationDirectoryFiles (decodeFileList BackendReturnedDestinationFiles)
+        , receiveError BackendReturnedError
+        , receiveMovedFiles (decodeFileList BackendReturnedMovedFiles)
+        , receiveSelectedDestinationDirectory BackendReturnedDestinationDirectoryPath
+        , receiveSelectedSourceDirectory BackendReturnedSourceDirectoryPath
+        , receiveSubDirectories (decodeFileList BackendReturnedDestinationDirectories)
+        ]
+
+
+synchronizeDestinationDirFilter : Model -> Model
+synchronizeDestinationDirFilter model =
+    if model.applySourceFilterToDestinationDirectories then
+        { model | destinationDirectoryFilter = model.sourceFilter }
+            |> filterDestinationDirectories
+
+    else
+        model
+
+
+synchronizeDestinationFilesFilter : Model -> Model
+synchronizeDestinationFilesFilter model =
+    if model.applySourceFilterToDestinationFiles then
+        { model | destinationFilesFilter = model.sourceFilter }
+            |> filterDestinationFiles
+
+    else
+        model
+
+
 type Target
     = Source
     | Destination
 
 
+toggleSelectionStatus : File -> File
+toggleSelectionStatus file =
+    case file.status of
+        Unselected ->
+            { file | status = Selected }
+
+        Edited ->
+            { file | status = Selected }
+
+        Selected ->
+            { file | status = Unselected }
+
+        SelectedForDeletion ->
+            -- TODO  Remove from the list of files selected for deletion
+            { file | status = Selected }
+
+
+
+-- VIEW
+
+
+truncatePath : String -> String
+truncatePath fullPath =
+    let
+        actualLength : Int
+        actualLength =
+            String.length fullPath
+    in
+    if actualLength > maxVisiblePathLength then
+        "..." ++ String.dropLeft (actualLength - maxVisiblePathLength) fullPath
+
+    else
+        fullPath
+
+
+undo : Model -> ( Model, Cmd Msg )
+undo model =
+    case List.head model.history of
+        Just commands ->
+            let
+                ( updatedModel, cmds ) =
+                    List.foldl
+                        (\command ( modelAcc, cmdAcc ) ->
+                            case command.operation of
+                                Move ->
+                                    undoMove modelAcc cmdAcc command
+
+                                Rename ->
+                                    undoRenaming modelAcc cmdAcc command
+                        )
+                        ( model, [] )
+                        commands
+            in
+            ( { updatedModel
+                | history = List.drop 1 model.history
+              }
+            , Cmd.batch cmds
+            )
+
+        Nothing ->
+            ( model, Cmd.none )
+
+
+undoMove : Model -> List (Cmd Msg) -> Command -> ( Model, List (Cmd Msg) )
+undoMove model cmds command =
+    let
+        destination : String
+        destination =
+            command.source
+                |> Maybe.withDefault ""
+
+        filesToMove : List String
+        filesToMove =
+            command.files
+                |> List.map (\f -> source ++ model.pathSeparator ++ f.name)
+
+        source : String
+        source =
+            command.destination
+                |> Maybe.withDefault ""
+    in
+    ( { model | isUndoing = True }
+    , moveFiles ( filesToMove, destination ) :: cmds
+    )
+
+
+undoRenaming : Model -> List (Cmd Msg) -> Command -> ( Model, List (Cmd Msg) )
+undoRenaming model cmds command =
+    let
+        encodedValue : Json.Encode.Value
+        encodedValue =
+            Json.Encode.object
+                [ ( "oldName", Json.Encode.string oldName )
+                , ( "newName", Json.Encode.string newName )
+                ]
+
+        newName : String
+        newName =
+            command.source |> Maybe.withDefault ""
+
+        oldName : String
+        oldName =
+            command.destination |> Maybe.withDefault ""
+    in
+    ( { model
+        | isUndoing = True
+      }
+    , renameFiles [ encodedValue ] :: cmds
+    )
+
+
+unixPathSep : String
+unixPathSep =
+    "/"
+
+
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
-    case Debug.log "msg" msg of
+    case msg of
         AdjustTimeZone newZone ->
             ( { model | timezone = newZone }
             , Cmd.none
@@ -325,9 +1164,9 @@ update msg model =
 
         BackendReturnedCreatedDirectory _ ->
             ( { model
-                | isCreatingDirectory = False
-                , editedDirName = ""
+                | editedDirName = ""
                 , focusedZone = RightSide
+                , isCreatingDirectory = False
                 , previousFocusedZone = model.focusedZone
               }
             , Cmd.batch
@@ -348,9 +1187,9 @@ update msg model =
                         unixPathSep
             in
             ( { model
-                | sourceDirectoryPath = path
-                , destinationDirectoryPath = path
+                | destinationDirectoryPath = path
                 , pathSeparator = pathSeparator
+                , sourceDirectoryPath = path
               }
             , Cmd.batch
                 [ getSourceDirectoryContent path
@@ -362,36 +1201,6 @@ update msg model =
         BackendReturnedDestinationDirectories files ->
             ( { model | destinationSubdirectories = files }
                 |> filterDestinationDirectories
-            , Cmd.none
-            )
-
-        BackendReturnedError errorMsg ->
-            ( { model
-                | error = Just errorMsg
-                , focusedZone = ErrorMessage
-                , previousFocusedZone = model.focusedZone
-              }
-            , focusOn "close-error" NoOp
-            )
-
-        BackendReturnedSourceDirectoryContent directoryContent ->
-            let
-                ( dirList, fileList ) =
-                    List.partition .isDir directoryContent
-            in
-            ( { model
-                | sourceSubDirectories = dirList
-                , sourceDirectoryFiles = fileList
-              }
-                |> filterSourceFiles
-            , Cmd.none
-            )
-
-        BackendReturnedDestinationFiles fileList ->
-            ( { model
-                | destinationDirectoryFiles = fileList
-              }
-                |> filterDestinationFiles
             , Cmd.none
             )
 
@@ -408,6 +1217,23 @@ update msg model =
                     ]
                 )
 
+        BackendReturnedDestinationFiles fileList ->
+            ( { model
+                | destinationDirectoryFiles = fileList
+              }
+                |> filterDestinationFiles
+            , Cmd.none
+            )
+
+        BackendReturnedError errorMsg ->
+            ( { model
+                | error = Just errorMsg
+                , focusedZone = ErrorMessage
+                , previousFocusedZone = model.focusedZone
+              }
+            , focusOn "close-error" NoOp
+            )
+
         BackendReturnedMovedFiles files ->
             ( if model.isUndoing then
                 -- don't add anything to history
@@ -415,10 +1241,6 @@ update msg model =
 
               else
                 let
-                    firstMovedFile : Maybe File
-                    firstMovedFile =
-                        List.head files
-
                     destination : String
                     destination =
                         case firstMovedFile of
@@ -427,6 +1249,10 @@ update msg model =
 
                             Nothing ->
                                 ""
+
+                    firstMovedFile : Maybe File
+                    firstMovedFile =
+                        List.head files
 
                     source : String
                     source =
@@ -488,10 +1314,10 @@ update msg model =
                             originalPaths
                 in
                 { model
-                    | history = commands :: model.history
+                    | editedFile = Nothing
                     , editedFileName = ""
-                    , editedFile = Nothing
                     , focusedZone = LeftSide
+                    , history = commands :: model.history
                     , previousFocusedZone = model.focusedZone
                     , sourceDirectoryFiles =
                         List.map
@@ -510,6 +1336,19 @@ update msg model =
                 ]
             )
 
+        BackendReturnedSourceDirectoryContent directoryContent ->
+            let
+                ( dirList, fileList ) =
+                    List.partition .isDir directoryContent
+            in
+            ( { model
+                | sourceDirectoryFiles = fileList
+                , sourceSubDirectories = dirList
+              }
+                |> filterSourceFiles
+            , Cmd.none
+            )
+
         BackendReturnedSourceDirectoryPath path ->
             if path == "" then
                 -- user canceled the selection
@@ -520,25 +1359,8 @@ update msg model =
                 , getSourceDirectoryContent path
                 )
 
-        UserPressedKey target event ->
-            if model.isUndoing then
-                -- ignore key presses while an undoing is being performed
-                -- it could mess with the history
-                ( model, Cmd.none )
-
-            else
-                processKeyboardShortcut model target event
-
         NoOp ->
             ( model, Cmd.none )
-
-        UserChangedSourceFilter filteringString ->
-            ( { model | sourceFilter = filteringString }
-                |> filterSourceFiles
-                |> synchronizeDestinationDirFilter
-                |> synchronizeDestinationFilesFilter
-            , Cmd.none
-            )
 
         UserChangedDestinationDirectoryFilter filteringString ->
             ( { model | destinationDirectoryFilter = filteringString }
@@ -552,6 +1374,49 @@ update msg model =
             , Cmd.none
             )
 
+        UserChangedSourceFilter filteringString ->
+            ( { model | sourceFilter = filteringString }
+                |> filterSourceFiles
+                |> synchronizeDestinationDirFilter
+                |> synchronizeDestinationFilesFilter
+            , Cmd.none
+            )
+
+        UserChangedSourceReplace replaceString ->
+            ( { model | sourceReplace = replaceString }
+            , Cmd.none
+            )
+
+        UserChangedSourceSearch searchString ->
+            ( { model | sourceSearch = searchString }, Cmd.none )
+
+        UserClickedCancel ->
+            let
+                unselectForDeletion : File -> File
+                unselectForDeletion file =
+                    if file.status == SelectedForDeletion then
+                        { file | status = Selected }
+
+                    else
+                        file
+            in
+            ( { model
+                | destinationDirectoryFiles = List.map unselectForDeletion model.destinationDirectoryFiles
+                , filesToDelete = []
+                , focusedZone = LeftSide
+                , previousFocusedZone = model.focusedZone
+                , sourceDirectoryFiles = List.map unselectForDeletion model.sourceDirectoryFiles
+              }
+            , focusOn "container-left" NoOp
+            )
+
+        UserClickedClearSourceFilter ->
+            ( { model | sourceFilter = "" }
+                |> filterSourceFiles
+                |> synchronizeDestinationDirFilter
+            , Cmd.none
+            )
+
         UserClickedClearDestinationDirectoryFilter ->
             ( { model | destinationDirectoryFilter = "" } |> filterDestinationDirectories
             , Cmd.none
@@ -562,57 +1427,14 @@ update msg model =
             , Cmd.none
             )
 
-        UserClickedClearSourceFilter ->
-            ( { model | sourceFilter = "" }
-                |> filterSourceFiles
-                |> synchronizeDestinationDirFilter
-            , Cmd.none
-            )
+        UserClickedCloseError ->
+            { model
+                | error = Nothing
+            }
+                |> restoreFocus
 
-        UserClickedSourceDirectoryButton ->
-            ( model, selectSourceDirectory model.sourceDirectoryPath )
-
-        UserClickedDestinationDirectoryButton ->
-            ( model, selectDestinationDirectory model.destinationDirectoryPath )
-
-        UserClickedSourceFile file ->
-            let
-                newFile : File
-                newFile =
-                    file |> toggleSelectionStatus
-
-                updatedSourceFiles : List File
-                updatedSourceFiles =
-                    List.Extra.updateIf ((==) file) (\_ -> newFile) model.sourceDirectoryFiles
-            in
-            ( { model
-                | sourceDirectoryFiles = updatedSourceFiles
-                , focusedZone = LeftSide
-                , previousFocusedZone = model.focusedZone
-              }
-                |> filterSourceFiles
-            , focusOn "container-left" NoOp
-            )
-
-        UserClickedDestinationFile file ->
-            let
-                newFile : File
-                newFile =
-                    file |> toggleSelectionStatus
-
-                updatedDestinationFiles : List File
-                updatedDestinationFiles =
-                    List.Extra.updateIf ((==) file) (\_ -> newFile) model.destinationDirectoryFiles
-            in
-            ( { model | destinationDirectoryFiles = updatedDestinationFiles }
-            , Cmd.none
-            )
-
-        UserModifiedFileName newName ->
-            ( { model | editedFileName = newName }, Cmd.none )
-
-        UserModifiedDirName newName ->
-            ( { model | editedDirName = newName }, Cmd.none )
+        UserClickedDelete ->
+            removeSelectedFiles model
 
         UserClickedDestinationDirectory file ->
             let
@@ -632,6 +1454,37 @@ update msg model =
                 ]
             )
 
+        UserClickedDestinationDirectoryButton ->
+            ( model, selectDestinationDirectory model.destinationDirectoryPath )
+
+        UserClickedDestinationFile file ->
+            let
+                newFile : File
+                newFile =
+                    file |> toggleSelectionStatus
+
+                updatedDestinationFiles : List File
+                updatedDestinationFiles =
+                    List.Extra.updateIf ((==) file) (\_ -> newFile) model.destinationDirectoryFiles
+            in
+            ( { model | destinationDirectoryFiles = updatedDestinationFiles }
+            , Cmd.none
+            )
+
+        UserClickedReload target ->
+            reload model target
+
+        UserClickedReplaceButton ->
+            let
+                renamings : List Renaming
+                renamings =
+                    model.sourceDirectoryFiles
+                        |> List.filterMap (nameReplacement model.sourceSearch model.sourceReplace)
+            in
+            ( { model | sourceReplace = "" }
+            , applyRenaming model renamings
+            )
+
         UserClickedSourceDirectory file ->
             let
                 newSourcePath : String
@@ -647,45 +1500,27 @@ update msg model =
             , getSourceDirectoryContent newSourcePath
             )
 
-        UserChangedFocusedZone focus ->
-            ( { model
-                | focusedZone = focus
-                , previousFocusedZone = model.focusedZone
-              }
-            , Cmd.none
-            )
+        UserClickedSourceDirectoryButton ->
+            ( model, selectSourceDirectory model.sourceDirectoryPath )
 
-        UserClickedDelete ->
-            removeSelectedFiles model
-
-        UserClickedCancel ->
+        UserClickedSourceFile file ->
             let
-                unselectForDeletion : File -> File
-                unselectForDeletion file =
-                    if file.status == SelectedForDeletion then
-                        { file | status = Selected }
+                newFile : File
+                newFile =
+                    file |> toggleSelectionStatus
 
-                    else
-                        file
+                updatedSourceFiles : List File
+                updatedSourceFiles =
+                    List.Extra.updateIf ((==) file) (\_ -> newFile) model.sourceDirectoryFiles
             in
             ( { model
-                | filesToDelete = []
-                , focusedZone = LeftSide
+                | focusedZone = LeftSide
                 , previousFocusedZone = model.focusedZone
-                , sourceDirectoryFiles = List.map unselectForDeletion model.sourceDirectoryFiles
-                , destinationDirectoryFiles = List.map unselectForDeletion model.destinationDirectoryFiles
+                , sourceDirectoryFiles = updatedSourceFiles
               }
+                |> filterSourceFiles
             , focusOn "container-left" NoOp
             )
-
-        UserClickedCloseError ->
-            { model
-                | error = Nothing
-            }
-                |> restoreFocus
-
-        UserClickedReload target ->
-            reload model target
 
         UserClickedSynchronizeDirFilterButton ->
             ( { model | applySourceFilterToDestinationDirectories = not model.applySourceFilterToDestinationDirectories }
@@ -699,24 +1534,28 @@ update msg model =
             , Cmd.none
             )
 
-        UserChangedSourceReplace replaceString ->
-            ( { model | sourceReplace = replaceString }
+        UserChangedFocusedZone focus ->
+            ( { model
+                | focusedZone = focus
+                , previousFocusedZone = model.focusedZone
+              }
             , Cmd.none
             )
 
-        UserChangedSourceSearch searchString ->
-            ( { model | sourceSearch = searchString }, Cmd.none )
+        UserModifiedFileName newName ->
+            ( { model | editedFileName = newName }, Cmd.none )
 
-        UserClickedReplaceButton ->
-            let
-                renamings : List Renaming
-                renamings =
-                    model.sourceDirectoryFiles
-                        |> List.filterMap (nameReplacement model.sourceSearch model.sourceReplace)
-            in
-            ( { model | sourceReplace = "" }
-            , applyRenaming model renamings
-            )
+        UserModifiedDirName newName ->
+            ( { model | editedDirName = newName }, Cmd.none )
+
+        UserPressedKey target event ->
+            if model.isUndoing then
+                -- ignore key presses while an undoing is being performed
+                -- it could mess with the history
+                ( model, Cmd.none )
+
+            else
+                processKeyboardShortcut model target event
 
         UserSubmittedDirName ->
             if model.isCreatingDirectory && model.editedDirName /= "" then
@@ -736,6 +1575,14 @@ update msg model =
                     String.isEmpty model.editedFileName
             in
             case ( model.editedFile, isConflicting, isNameEmpty ) of
+                ( Just _, True, False ) ->
+                    ( { model
+                        | error = Just ("A file with the name " ++ model.editedFileName ++ " already exists in the source directory")
+                        , focusedZone = ErrorMessage
+                      }
+                    , focusOn "close-error" NoOp
+                    )
+
                 ( Just file, False, False ) ->
                     let
                         renaming : Renaming
@@ -748,804 +1595,8 @@ update msg model =
                     , applyRenaming model [ renaming ]
                     )
 
-                ( Just _, True, False ) ->
-                    ( { model
-                        | error = Just ("A file with the name " ++ model.editedFileName ++ " already exists in the source directory")
-                        , focusedZone = ErrorMessage
-                      }
-                    , focusOn "close-error" NoOp
-                    )
-
                 _ ->
                     ( model, Cmd.none )
-
-
-createNewDirectory : Model -> ( Model, Cmd Msg )
-createNewDirectory model =
-    let
-        dirPath : String
-        dirPath =
-            model.destinationDirectoryPath
-                ++ model.pathSeparator
-                ++ model.editedDirName
-    in
-    ( model, createDirectory dirPath )
-
-
-toggleSelectionStatus : File -> File
-toggleSelectionStatus file =
-    case file.status of
-        Selected ->
-            { file | status = Unselected }
-
-        Unselected ->
-            { file | status = Selected }
-
-        Edited ->
-            { file | status = Selected }
-
-        SelectedForDeletion ->
-            -- TODO  Remove from the list of files selected for deletion
-            { file | status = Selected }
-
-
-nameReplacement : String -> String -> File -> Maybe Renaming
-nameReplacement before after file =
-    if file.satisfiesFilter && String.contains before file.name then
-        Just
-            { file = { file | name = String.replace before after file.name }
-
-            -- TODO prepend with the source dir?
-            , originalPath = file.name
-            }
-
-    else
-        Nothing
-
-
-parentDir : Model -> String -> String
-parentDir model path =
-    let
-        index : Int
-        index =
-            String.indexes model.pathSeparator path
-                |> List.Extra.last
-                |> Maybe.withDefault (String.length path)
-    in
-    String.slice 0 index path
-
-
-filterSourceFiles : Model -> Model
-filterSourceFiles model =
-    let
-        words : List String
-        words =
-            String.words model.sourceFilter
-    in
-    case words of
-        [] ->
-            { model
-                | sourceDirectoryFiles = List.map (\f -> { f | satisfiesFilter = True }) model.sourceDirectoryFiles
-            }
-
-        _ ->
-            { model
-                | sourceDirectoryFiles =
-                    List.map (\f -> { f | satisfiesFilter = filterByName words f }) model.sourceDirectoryFiles
-            }
-
-
-filterDestinationDirectories : Model -> Model
-filterDestinationDirectories model =
-    let
-        words : List String
-        words =
-            String.words model.destinationDirectoryFilter
-    in
-    case words of
-        [] ->
-            { model
-                | destinationSubdirectories =
-                    List.map (\f -> { f | satisfiesFilter = True })
-                        model.destinationSubdirectories
-            }
-
-        _ ->
-            { model
-                | destinationSubdirectories =
-                    List.map (\f -> { f | satisfiesFilter = filterByName words f || filterByParentPath words f })
-                        model.destinationSubdirectories
-            }
-
-
-filterDestinationFiles : Model -> Model
-filterDestinationFiles model =
-    let
-        words : List String
-        words =
-            String.words model.destinationFilesFilter
-    in
-    case words of
-        [] ->
-            { model
-                | destinationDirectoryFiles = List.map (\f -> { f | satisfiesFilter = True }) model.destinationDirectoryFiles
-            }
-
-        _ ->
-            { model
-                | destinationDirectoryFiles =
-                    List.map (\f -> { f | satisfiesFilter = filterByName words f }) model.destinationDirectoryFiles
-            }
-
-
-filterByName : List String -> File -> Bool
-filterByName filters file =
-    if file.name == ".." then
-        True
-
-    else
-        let
-            lowerCaseFilename : String
-            lowerCaseFilename =
-                String.toLower file.name
-        in
-        List.all (\word -> String.contains (String.toLower word) lowerCaseFilename) filters
-
-
-filterByParentPath : List String -> File -> Bool
-filterByParentPath filters file =
-    if file.name == ".." then
-        True
-
-    else
-        let
-            lowerCaseParentPath : String
-            lowerCaseParentPath =
-                String.toLower file.parentPath
-        in
-        List.all (\word -> String.contains (String.toLower word) lowerCaseParentPath) filters
-
-
-synchronizeDestinationDirFilter : Model -> Model
-synchronizeDestinationDirFilter model =
-    if model.applySourceFilterToDestinationDirectories then
-        { model | destinationDirectoryFilter = model.sourceFilter }
-            |> filterDestinationDirectories
-
-    else
-        model
-
-
-synchronizeDestinationFilesFilter : Model -> Model
-synchronizeDestinationFilesFilter model =
-    if model.applySourceFilterToDestinationFiles then
-        { model | destinationFilesFilter = model.sourceFilter }
-            |> filterDestinationFiles
-
-    else
-        model
-
-
-moveSelectedFiles : Model -> ( Model, Cmd Msg )
-moveSelectedFiles model =
-    let
-        ( filesToMove, destination ) =
-            case model.focusedZone of
-                RightSide ->
-                    ( model.destinationDirectoryFiles
-                        |> List.filter (\f -> f.status == Selected)
-                        |> List.map (\file -> file.parentPath ++ model.pathSeparator ++ file.name)
-                    , model.sourceDirectoryPath
-                    )
-
-                _ ->
-                    ( model.sourceDirectoryFiles
-                        |> filterSelectedFiles
-                        |> List.map (\file -> file.parentPath ++ model.pathSeparator ++ file.name)
-                    , model.destinationDirectoryPath
-                    )
-    in
-    ( model
-    , moveFiles ( filesToMove, destination )
-    )
-
-
-
--- TODO allow renaming destination files
-
-
-renameSelectedSourceFile : Model -> ( Model, Cmd Msg )
-renameSelectedSourceFile model =
-    let
-        fileToEdit : Maybe File
-        fileToEdit =
-            model.sourceDirectoryFiles
-                |> List.Extra.find (\f -> f.satisfiesFilter && f.status == Selected)
-    in
-    case fileToEdit of
-        Just file ->
-            let
-                sourceDirectoryFiles : List File
-                sourceDirectoryFiles =
-                    model.sourceDirectoryFiles
-                        |> List.Extra.updateIf (\f -> f == file) (\f -> { f | status = Edited })
-            in
-            ( { model
-                | editedFile = Just file
-                , editedFileName = file.name
-                , sourceDirectoryFiles = sourceDirectoryFiles
-              }
-            , focusOn "filename-input" NoOp
-            )
-
-        Nothing ->
-            ( model, Cmd.none )
-
-
-{-| Sets focus on an HTML element, then sends a msg when done (even if the element is not found)
--}
-focusOn : String -> msg -> Cmd msg
-focusOn elementId msg =
-    Browser.Dom.focus elementId |> Task.attempt (\_ -> msg)
-
-
-restoreFocus : Model -> ( Model, Cmd Msg )
-restoreFocus model =
-    ( { model | focusedZone = model.previousFocusedZone }
-    , focusOn
-        (case model.previousFocusedZone of
-            Confirmation ->
-                "delete-button"
-
-            ErrorMessage ->
-                "close-error"
-
-            Filtering ->
-                -- TODO handle filtering right
-                "filtering-left"
-
-            LeftSide ->
-                "container-left"
-
-            FileNameEditor ->
-                "filename-input"
-
-            DirNameEditor ->
-                "dirname-input"
-
-            RightSide ->
-                "container-right"
-
-            SourceSearchReplace ->
-                "search-left"
-        )
-        NoOp
-    )
-
-
-prepareSelectedFilesForRemoval : Model -> ( Model, Cmd Msg )
-prepareSelectedFilesForRemoval model =
-    case model.focusedZone of
-        LeftSide ->
-            ( { model
-                | filesToDelete = filterSelectedFiles model.sourceDirectoryFiles
-                , focusedZone = Confirmation
-                , previousFocusedZone = model.focusedZone
-              }
-                |> changeStatusOfSelectedSourceFiles SelectedForDeletion
-            , focusOn "delete-button" NoOp
-            )
-
-        RightSide ->
-            ( { model
-                | filesToDelete =
-                    model.destinationDirectoryFiles
-                        |> List.filter (\f -> f.status == Selected)
-                , focusedZone = Confirmation
-                , previousFocusedZone = model.focusedZone
-              }
-                |> changeStatusOfSelectedDestinationFiles SelectedForDeletion
-            , focusOn "delete-button" NoOp
-            )
-
-        _ ->
-            ( model, Cmd.none )
-
-
-filterSelectedFiles : List File -> List File
-filterSelectedFiles files =
-    List.filter (\f -> f.satisfiesFilter && f.status == Selected) files
-
-
-changeStatusOfSelectedSourceFiles : FileStatus -> Model -> Model
-changeStatusOfSelectedSourceFiles fileStatus model =
-    { model
-        | sourceDirectoryFiles =
-            List.map
-                (\file ->
-                    if file.satisfiesFilter && file.status == Selected then
-                        { file | status = fileStatus }
-
-                    else
-                        file
-                )
-                model.sourceDirectoryFiles
-    }
-        |> filterSourceFiles
-
-
-changeStatusOfSelectedDestinationFiles : FileStatus -> Model -> Model
-changeStatusOfSelectedDestinationFiles fileStatus model =
-    { model
-        | destinationDirectoryFiles =
-            List.map
-                (\file ->
-                    if file.status == Selected then
-                        { file | status = fileStatus }
-
-                    else
-                        file
-                )
-                model.destinationDirectoryFiles
-    }
-
-
-removeSelectedFiles : Model -> ( Model, Cmd Msg )
-removeSelectedFiles model =
-    let
-        commands : List (Cmd msg)
-        commands =
-            model.filesToDelete
-                |> List.map
-                    (\file ->
-                        removeFile <|
-                            Json.Encode.string <|
-                                file.parentPath
-                                    ++ model.pathSeparator
-                                    ++ file.name
-                    )
-    in
-    ( { model
-        | filesToDelete = []
-        , focusedZone = LeftSide
-      }
-    , Cmd.batch
-        (focusOn "container-left" NoOp :: commands)
-    )
-
-
-applyRenaming : Model -> List Renaming -> Cmd Msg
-applyRenaming model renamings =
-    let
-        encodedRenamings : List Json.Encode.Value
-        encodedRenamings =
-            renamings
-                |> List.map
-                    (\renaming ->
-                        Json.Encode.object
-                            [ ( "oldName"
-                              , renaming.file.parentPath
-                                    ++ model.pathSeparator
-                                    ++ renaming.originalPath
-                                    |> Json.Encode.string
-                              )
-                            , ( "newName"
-                              , renaming.file.parentPath
-                                    ++ model.pathSeparator
-                                    ++ renaming.file.name
-                                    |> Json.Encode.string
-                              )
-                            ]
-                    )
-    in
-    renameFiles encodedRenamings
-
-
-undo : Model -> ( Model, Cmd Msg )
-undo model =
-    case List.head model.history of
-        Just commands ->
-            let
-                ( updatedModel, cmds ) =
-                    List.foldl
-                        (\command ( modelAcc, cmdAcc ) ->
-                            case command.operation of
-                                Move ->
-                                    undoMove modelAcc cmdAcc command
-
-                                Rename ->
-                                    undoRenaming modelAcc cmdAcc command
-
-                                Delete ->
-                                    Debug.todo "Implement delete cancellation"
-                        )
-                        ( model, [] )
-                        commands
-            in
-            ( { updatedModel
-                | history = List.drop 1 model.history
-              }
-            , Cmd.batch cmds
-            )
-
-        Nothing ->
-            ( model, Cmd.none )
-
-
-undoMove : Model -> List (Cmd Msg) -> Command -> ( Model, List (Cmd Msg) )
-undoMove model cmds command =
-    let
-        source : String
-        source =
-            command.destination
-                |> Maybe.withDefault ""
-
-        filesToMove : List String
-        filesToMove =
-            command.files
-                |> List.map (\f -> source ++ model.pathSeparator ++ f.name)
-
-        destination : String
-        destination =
-            command.source
-                |> Maybe.withDefault ""
-    in
-    ( { model | isUndoing = True }
-    , moveFiles ( filesToMove, destination ) :: cmds
-    )
-
-
-undoRenaming : Model -> List (Cmd Msg) -> Command -> ( Model, List (Cmd Msg) )
-undoRenaming model cmds command =
-    let
-        oldName : String
-        oldName =
-            command.destination |> Maybe.withDefault ""
-
-        newName : String
-        newName =
-            command.source |> Maybe.withDefault ""
-
-        encodedValue : Json.Encode.Value
-        encodedValue =
-            Json.Encode.object
-                [ ( "oldName", Json.Encode.string oldName )
-                , ( "newName", Json.Encode.string newName )
-                ]
-    in
-    ( { model
-        | isUndoing = True
-      }
-    , renameFiles [ encodedValue ] :: cmds
-    )
-
-
-changeAllFileStatus : Model -> Target -> FileStatus -> ( Model, Cmd Msg )
-changeAllFileStatus model target status =
-    case target of
-        Source ->
-            let
-                updatedFiles : List File
-                updatedFiles =
-                    model.sourceDirectoryFiles
-                        |> List.map
-                            (\f ->
-                                if f.satisfiesFilter then
-                                    { f | status = status }
-
-                                else
-                                    f
-                            )
-            in
-            ( { model
-                | sourceDirectoryFiles = updatedFiles
-              }
-                |> filterSourceFiles
-            , Cmd.none
-            )
-
-        Destination ->
-            let
-                updatedFiles : List File
-                updatedFiles =
-                    model.destinationDirectoryFiles
-                        |> List.map
-                            (\f -> { f | status = status })
-            in
-            ( { model
-                | destinationDirectoryFiles = updatedFiles
-              }
-            , Cmd.none
-            )
-
-
-reload : Model -> Target -> ( Model, Cmd Msg )
-reload model target =
-    case target of
-        Source ->
-            ( model
-            , getSourceDirectoryContent model.sourceDirectoryPath
-            )
-
-        Destination ->
-            ( model
-            , Cmd.batch
-                [ getDestinationSubdirectories model.destinationDirectoryPath
-                , getDestinationDirectoryFiles model.destinationDirectoryPath
-                ]
-            )
-
-
-openSelectedFile : Model -> Target -> ( Model, Cmd Msg )
-openSelectedFile model target =
-    let
-        fileToOpen : Maybe File
-        fileToOpen =
-            case target of
-                Source ->
-                    model.sourceDirectoryFiles
-                        |> List.Extra.find (\f -> f.satisfiesFilter && f.status == Selected)
-
-                Destination ->
-                    model.destinationDirectoryFiles
-                        |> List.Extra.find (\f -> f.status == Selected)
-    in
-    case fileToOpen of
-        Just file ->
-            ( model, openFile <| file.parentPath ++ model.pathSeparator ++ file.name )
-
-        Nothing ->
-            ( model, Cmd.none )
-
-
-openSelectedFolder : Model -> Target -> ( Model, Cmd Msg )
-openSelectedFolder model target =
-    let
-        folderToOpen : String
-        folderToOpen =
-            case target of
-                Source ->
-                    model.sourceDirectoryPath
-
-                Destination ->
-                    model.destinationDirectoryPath
-    in
-    ( model, openFile folderToOpen )
-
-
-showDirNameEditor : Model -> Target -> ( Model, Cmd Msg )
-showDirNameEditor model target =
-    case target of
-        Source ->
-            ( model, Cmd.none )
-
-        Destination ->
-            ( { model
-                | isCreatingDirectory = True
-              }
-            , focusOn "dirname-input" NoOp
-            )
-
-
-processKeyboardShortcut : Model -> Target -> KeyboardEvent -> ( Model, Cmd Msg )
-processKeyboardShortcut model target event =
-    case model.focusedZone of
-        Confirmation ->
-            processConfirmationShortcuts model event
-
-        LeftSide ->
-            processMainShortcuts model target event
-
-        RightSide ->
-            processMainShortcuts model target event
-
-        DirNameEditor ->
-            case event.keyCode of
-                Key.Escape ->
-                    { model | isCreatingDirectory = False, editedDirName = "" }
-                        |> restoreFocus
-
-                _ ->
-                    ( model, Cmd.none )
-
-        FileNameEditor ->
-            case event.keyCode of
-                Key.Escape ->
-                    let
-                        sourceDirectoryFiles : List File
-                        sourceDirectoryFiles =
-                            model.sourceDirectoryFiles
-                                |> List.Extra.updateIf (\f -> f.status == Edited) (\f -> { f | status = Selected })
-                    in
-                    { model
-                        | editedFile = Nothing
-                        , editedFileName = ""
-                        , sourceDirectoryFiles = sourceDirectoryFiles
-                    }
-                        |> restoreFocus
-
-                _ ->
-                    ( model, Cmd.none )
-
-        _ ->
-            ( model, Cmd.none )
-
-
-processConfirmationShortcuts : Model -> KeyboardEvent -> ( Model, Cmd Msg )
-processConfirmationShortcuts model event =
-    case ( event.keyCode, event.ctrlKey, event.metaKey ) of
-        ( Key.Enter, False, False ) ->
-            removeSelectedFiles model
-
-        ( Key.Escape, False, False ) ->
-            ( { model | filesToDelete = [], focusedZone = LeftSide }
-            , focusOn "container-left" NoOp
-            )
-
-        _ ->
-            ( model, Cmd.none )
-
-
-processMainShortcuts : Model -> Target -> KeyboardEvent -> ( Model, Cmd Msg )
-processMainShortcuts model target event =
-    if event.ctrlKey || event.metaKey then
-        case ( event.keyCode, event.shiftKey ) of
-            ( Key.A, False ) ->
-                changeAllFileStatus model target Selected
-
-            ( Key.A, True ) ->
-                changeAllFileStatus model target Unselected
-
-            ( Key.Backspace, False ) ->
-                prepareSelectedFilesForRemoval model
-
-            ( Key.R, False ) ->
-                reload model target
-
-            ( Key.Z, False ) ->
-                undo model
-
-            _ ->
-                ( model, Cmd.none )
-
-    else if event.altKey then
-        case event.keyCode of
-            Key.F4 ->
-                ( model, quit () )
-
-            _ ->
-                ( model, Cmd.none )
-
-    else
-        case ( event.keyCode, event.shiftKey ) of
-            ( Key.F2, False ) ->
-                renameSelectedSourceFile model
-
-            ( Key.F5, False ) ->
-                reload model target
-
-            ( Key.F, False ) ->
-                openSelectedFolder model target
-
-            ( Key.M, False ) ->
-                moveSelectedFiles model
-
-            ( Key.N, False ) ->
-                showDirNameEditor model target
-
-            ( Key.O, False ) ->
-                openSelectedFile model target
-
-            ( Key.R, False ) ->
-                renameSelectedSourceFile model
-
-            ( Key.Delete, False ) ->
-                prepareSelectedFilesForRemoval model
-
-            ( Key.U, False ) ->
-                undo model
-
-            _ ->
-                ( model, Cmd.none )
-
-
-
--- SUBSCRIPTIONS
-
-
-subscriptions : Model -> Sub Msg
-subscriptions _ =
-    Sub.batch
-        [ fileRemoved (decodeFileWithPreviousName BackendReturnedRemovedFile)
-        , filesRenamed (decodeRenamingList BackendReturnedRenamedFiles)
-        , receiveCreatedDirectory (decodeFile BackendReturnedCreatedDirectory)
-        , receiveCurrentDirectoryPath BackendReturnedCurrentDirPath
-        , receiveSourceDirectoryContent (decodeFileList BackendReturnedSourceDirectoryContent)
-        , receiveDestinationDirectoryFiles (decodeFileList BackendReturnedDestinationFiles)
-        , receiveError BackendReturnedError
-        , receiveMovedFiles (decodeFileList BackendReturnedMovedFiles)
-        , receiveSelectedDestinationDirectory BackendReturnedDestinationDirectoryPath
-        , receiveSelectedSourceDirectory BackendReturnedSourceDirectoryPath
-        , receiveSubDirectories (decodeFileList BackendReturnedDestinationDirectories)
-        ]
-
-
-decodeRenamingList : (List File -> List String -> Msg) -> Json.Encode.Value -> Msg
-decodeRenamingList msg value =
-    let
-        decodedFiles : Result Json.Decode.Error (List File)
-        decodedFiles =
-            Json.Decode.decodeValue (list fileDecoder) value
-
-        decodedOriginalPaths : Result Json.Decode.Error (List String)
-        decodedOriginalPaths =
-            Json.Decode.decodeValue (list <| Json.Decode.field "PreviousName" Json.Decode.string) value
-    in
-    case ( decodedFiles, decodedOriginalPaths ) of
-        ( Ok fileList, Ok originalPaths ) ->
-            msg fileList originalPaths
-
-        ( Err error, _ ) ->
-            BackendReturnedError (Json.Decode.errorToString error)
-
-        ( _, Err error ) ->
-            BackendReturnedError (Json.Decode.errorToString error)
-
-
-decodeFileList : (List File -> Msg) -> Json.Encode.Value -> Msg
-decodeFileList msg value =
-    let
-        decodedFiles : Result Json.Decode.Error (List File)
-        decodedFiles =
-            Json.Decode.decodeValue (list fileDecoder) value
-    in
-    case decodedFiles of
-        Ok fileList ->
-            msg fileList
-
-        Err error ->
-            BackendReturnedError (Json.Decode.errorToString error)
-
-
-decodeFileWithPreviousName : (File -> String -> Msg) -> Json.Encode.Value -> Msg
-decodeFileWithPreviousName msg value =
-    let
-        decodedFile : Result Json.Decode.Error File
-        decodedFile =
-            Json.Decode.decodeValue fileDecoder value
-
-        decodedPreviousName : Result Json.Decode.Error String
-        decodedPreviousName =
-            Json.Decode.decodeValue (Json.Decode.field "PreviousName" Json.Decode.string) value
-    in
-    case ( decodedFile, decodedPreviousName ) of
-        ( Ok file, Ok previousName ) ->
-            msg file previousName
-
-        ( Ok file, Err _ ) ->
-            msg file ""
-
-        ( Err error, _ ) ->
-            BackendReturnedError (Json.Decode.errorToString error)
-
-
-decodeFile : (File -> Msg) -> Json.Encode.Value -> Msg
-decodeFile msg value =
-    let
-        decodedFile : Result Json.Decode.Error File
-        decodedFile =
-            Json.Decode.decodeValue fileDecoder value
-    in
-    case decodedFile of
-        Ok file ->
-            msg file
-
-        Err error ->
-            BackendReturnedError (Json.Decode.errorToString error)
-
-
-
--- VIEW
 
 
 view : Model -> Html Msg
@@ -1557,79 +1608,63 @@ view model =
         ]
 
 
-viewLeftSide : Model -> Html Msg
-viewLeftSide model =
+viewDate : Model -> Time.Posix -> Html Msg
+viewDate model time =
     let
-        conditionalAttributes : List (Html.Attribute Msg)
-        conditionalAttributes =
-            case ( model.editedFile, model.focusedZone ) of
-                ( Nothing, LeftSide ) ->
-                    [ Events.preventDefaultOn "keydown" (keyDecoderPreventingDefault Source)
-                    ]
+        day : String
+        day =
+            String.fromInt (Time.toDay model.timezone time)
+                |> String.padLeft 2 '0'
 
-                ( Nothing, _ ) ->
-                    [ onFocus (UserChangedFocusedZone LeftSide)
-                    ]
+        month : String
+        month =
+            Time.toMonth model.timezone time
+                |> monthToString
 
-                _ ->
-                    []
+        monthToString : Month -> String
+        monthToString timeMonth =
+            case timeMonth of
+                Jan ->
+                    "01"
+
+                Feb ->
+                    "02"
+
+                Mar ->
+                    "03"
+
+                Apr ->
+                    "04"
+
+                May ->
+                    "05"
+
+                Jun ->
+                    "06"
+
+                Jul ->
+                    "07"
+
+                Aug ->
+                    "08"
+
+                Sep ->
+                    "09"
+
+                Oct ->
+                    "10"
+
+                Nov ->
+                    "11"
+
+                Dec ->
+                    "12"
+
+        year : String
+        year =
+            String.fromInt (Time.toYear model.timezone time)
     in
-    div
-        ([ id "container-left"
-         , tabindex 1
-         ]
-            ++ conditionalAttributes
-        )
-    <|
-        viewSource model
-
-
-keyDecoderPreventingDefault : Target -> Json.Decode.Decoder ( Msg, Bool )
-keyDecoderPreventingDefault target =
-    decodeKeyboardEvent
-        |> Json.Decode.map
-            (\key ->
-                ( UserPressedKey target key, True )
-            )
-
-
-simpleKeyDecoder : Target -> Json.Decode.Decoder Msg
-simpleKeyDecoder target =
-    decodeKeyboardEvent
-        |> Json.Decode.map
-            (\key ->
-                UserPressedKey target key
-            )
-
-
-viewRightSide : Model -> Html Msg
-viewRightSide model =
-    let
-        conditionalAttributes : List (Html.Attribute Msg)
-        conditionalAttributes =
-            case model.focusedZone of
-                RightSide ->
-                    [ Events.preventDefaultOn "keydown" (keyDecoderPreventingDefault Destination) ]
-
-                _ ->
-                    []
-    in
-    div
-        ([ id "container-right"
-         , tabindex 2
-         , onFocus (UserChangedFocusedZone RightSide)
-         ]
-            ++ conditionalAttributes
-        )
-    <|
-        viewDestination model
-
-
-viewSource : Model -> List (Html Msg)
-viewSource model =
-    [ viewSourceSubdirectories model
-    , viewSourceFiles model
-    ]
+    text (day ++ "/" ++ month ++ "/" ++ year)
 
 
 viewDestination : Model -> List (Html Msg)
@@ -1639,54 +1674,93 @@ viewDestination model =
     ]
 
 
-viewSourceSubdirectories : Model -> Html Msg
-viewSourceSubdirectories model =
-    div [ class "panel" ]
-        [ div [ class <| "panel-header" ++ additionalHeaderClass model LeftSide ]
-            [ h2 [] [ text <| "Source: " ++ truncatePath model.sourceDirectoryPath ]
-            , span []
-                [ button
-                    [ class "btn"
-                    , onClick (UserClickedReload Source)
-                    ]
-                    [ text "Refresh" ]
-                , button
-                    [ class "btn"
-                    , onClick UserClickedSourceDirectoryButton
-                    ]
-                    [ text "..." ]
-                ]
+viewDestinationDirectoryFilter : Model -> Html Msg
+viewDestinationDirectoryFilter model =
+    div
+        [ class "input-box"
+        ]
+        [ input
+            [ class "input"
+            , type_ "text"
+            , id "filtering-dir-right"
+            , onInput UserChangedDestinationDirectoryFilter
+            , onFocus (UserChangedFocusedZone Filtering)
+            , value model.destinationDirectoryFilter
+            , placeholder "Enter one or more words to filter destination directories"
+            , disabled model.applySourceFilterToDestinationDirectories
             ]
+            []
+        , button
+            [ class "btn"
+            , onClick UserClickedClearDestinationDirectoryFilter
+            , disabled model.applySourceFilterToDestinationDirectories
+            ]
+            [ text "Clear" ]
+        , button [ class "btn link", onClick UserClickedSynchronizeDirFilterButton ]
+            [ if model.applySourceFilterToDestinationDirectories then
+                text "Unlink"
+
+              else
+                text "Link"
+            ]
+        ]
+
+
+viewDestinationFiles : Model -> Html Msg
+viewDestinationFiles model =
+    let
+        count : Int
+        count =
+            List.length model.destinationDirectoryFiles
+
+        countAsString : String
+        countAsString =
+            String.fromInt count
+    in
+    div [ class "panel" ]
+        [ div [ class <| "panel-header" ++ additionalHeaderClass model RightSide ]
+            [ h2 [] [ text <| countAsString ++ inflect count ++ " in destination directory" ]
+            ]
+        , viewDestinationFilesFilter model
         , div
             [ class "panel-content" ]
-            (model.sourceSubDirectories
+            (model.destinationDirectoryFiles
+                |> List.filter .satisfiesFilter
                 |> List.sortBy (.name >> String.toLower)
-                |> List.map (viewDirectory model UserClickedSourceDirectory)
+                |> List.map (viewFile model UserClickedDestinationFile False)
             )
         ]
 
 
-additionalHeaderClass : Model -> FocusedZone -> String
-additionalHeaderClass model zone =
-    if model.focusedZone == zone then
-        " focused"
-
-    else
-        " unfocused"
-
-
-viewEditedDirectoryName : Model -> Html Msg
-viewEditedDirectoryName model =
-    form [ onSubmit UserSubmittedDirName ]
+viewDestinationFilesFilter : Model -> Html Msg
+viewDestinationFilesFilter model =
+    div
+        [ class "input-box"
+        ]
         [ input
-            [ class "file-input"
-            , id "dirname-input"
-            , onInput UserModifiedDirName
-            , onFocus (UserChangedFocusedZone DirNameEditor)
-            , Events.on "keydown" (simpleKeyDecoder Destination)
-            , value model.editedDirName
+            [ class "input"
+            , type_ "text"
+            , id "filtering-files-right"
+            , onInput UserChangedDestinationFilesFilter
+            , onFocus (UserChangedFocusedZone Filtering)
+            , value model.destinationFilesFilter
+            , placeholder "Enter one or more words to filter files in destination directory"
+            , disabled model.applySourceFilterToDestinationFiles
             ]
             []
+        , button
+            [ class "btn"
+            , onClick UserClickedClearDestinationFilesFilter
+            , disabled model.applySourceFilterToDestinationFiles
+            ]
+            [ text "Clear" ]
+        , button [ class "btn link", onClick UserClickedSynchronizeFileFilterButton ]
+            [ if model.applySourceFilterToDestinationFiles then
+                text "Unlink"
+
+              else
+                text "Link"
+            ]
         ]
 
 
@@ -1730,70 +1804,6 @@ viewDestinationSubdirectories model =
         ]
 
 
-viewDestinationDirectoryFilter : Model -> Html Msg
-viewDestinationDirectoryFilter model =
-    div
-        [ class "input-box"
-        ]
-        [ input
-            [ class "input"
-            , type_ "text"
-            , id "filtering-dir-right"
-            , onInput UserChangedDestinationDirectoryFilter
-            , onFocus (UserChangedFocusedZone Filtering)
-            , value model.destinationDirectoryFilter
-            , placeholder "Enter one or more words to filter destination directories"
-            , disabled model.applySourceFilterToDestinationDirectories
-            ]
-            []
-        , button
-            [ class "btn"
-            , onClick UserClickedClearDestinationDirectoryFilter
-            , disabled model.applySourceFilterToDestinationDirectories
-            ]
-            [ text "Clear" ]
-        , button [ class "btn link", onClick UserClickedSynchronizeDirFilterButton ]
-            [ if model.applySourceFilterToDestinationDirectories then
-                text "Unlink"
-
-              else
-                text "Link"
-            ]
-        ]
-
-
-viewDestinationFilesFilter : Model -> Html Msg
-viewDestinationFilesFilter model =
-    div
-        [ class "input-box"
-        ]
-        [ input
-            [ class "input"
-            , type_ "text"
-            , id "filtering-files-right"
-            , onInput UserChangedDestinationFilesFilter
-            , onFocus (UserChangedFocusedZone Filtering)
-            , value model.destinationFilesFilter
-            , placeholder "Enter one or more words to filter files in destination directory"
-            , disabled model.applySourceFilterToDestinationFiles
-            ]
-            []
-        , button
-            [ class "btn"
-            , onClick UserClickedClearDestinationFilesFilter
-            , disabled model.applySourceFilterToDestinationFiles
-            ]
-            [ text "Clear" ]
-        , button [ class "btn link", onClick UserClickedSynchronizeFileFilterButton ]
-            [ if model.applySourceFilterToDestinationFiles then
-                text "Unlink"
-
-              else
-                text "Link"
-            ]
-        ]
-
-
 viewDirectory : Model -> (File -> Msg) -> File -> Html Msg
 viewDirectory _ onClickMsg file =
     div
@@ -1801,6 +1811,227 @@ viewDirectory _ onClickMsg file =
         , onClick (onClickMsg file)
         ]
         [ text <| file.name ]
+
+
+viewEditedDirectoryName : Model -> Html Msg
+viewEditedDirectoryName model =
+    form [ onSubmit UserSubmittedDirName ]
+        [ input
+            [ class "file-input"
+            , id "dirname-input"
+            , onInput UserModifiedDirName
+            , onFocus (UserChangedFocusedZone DirNameEditor)
+            , Events.on "keydown" (simpleKeyDecoder Destination)
+            , value model.editedDirName
+            ]
+            []
+        ]
+
+
+viewEditedFilename : Model -> Html Msg
+viewEditedFilename model =
+    form [ onSubmit UserSubmittedFilename ]
+        [ input
+            [ class "file-input"
+            , id "filename-input"
+            , onInput UserModifiedFileName
+            , onFocus (UserChangedFocusedZone FileNameEditor)
+            , Events.on "keydown" (simpleKeyDecoder Source)
+            , value model.editedFileName
+            ]
+            []
+        ]
+
+
+viewFile : Model -> (File -> Msg) -> Bool -> File -> Html Msg
+viewFile model onClickMsg canBeSearchedAndReplaced file =
+    if file.status == Edited then
+        viewEditedFilename model
+
+    else
+        viewReadOnlyFile model onClickMsg canBeSearchedAndReplaced file
+
+
+viewFocusedZone : Model -> Html Msg
+viewFocusedZone model =
+    text <|
+        case model.focusedZone of
+            Confirmation ->
+                "Confirmation _ "
+
+            ErrorMessage ->
+                "ErrorMessage _ "
+
+            Filtering ->
+                "Filtering _ "
+
+            LeftSide ->
+                "LeftSide _ "
+
+            FileNameEditor ->
+                "NameEditor _ "
+
+            DirNameEditor ->
+                "DirNameEditor _ "
+
+            RightSide ->
+                "RightSide _ "
+
+            SourceSearchReplace ->
+                "SourceSearchReplace _ "
+
+
+viewFooter : Model -> Html Msg
+viewFooter model =
+    let
+        className : String
+        className =
+            if model.error /= Nothing || isWaitingForConfirmation then
+                "danger"
+
+            else
+                ""
+
+        conditionalAttributes : List (Html.Attribute Msg)
+        conditionalAttributes =
+            if isWaitingForConfirmation then
+                [ Events.preventDefaultOn "keydown" (keyDecoderPreventingDefault Source)
+                , onFocus (UserChangedFocusedZone Confirmation)
+                ]
+
+            else
+                []
+
+        isWaitingForConfirmation : Bool
+        isWaitingForConfirmation =
+            List.length model.filesToDelete > 0
+    in
+    footer
+        (class className :: conditionalAttributes)
+        [ case model.error of
+            Just errorMsg ->
+                div []
+                    [ text errorMsg
+                    , button [ id "close-error", class "btn", onClick UserClickedCloseError ] [ text "Ok" ]
+                    ]
+
+            Nothing ->
+                viewFocusedZone model
+        , case model.filesToDelete of
+            [] ->
+                text ""
+
+            _ ->
+                span
+                    []
+                    [ text "This will permanently delete the selected files. This cannot be undone."
+                    , button [ class "btn", onClick UserClickedCancel ] [ text "Cancel" ]
+                    , button [ class "btn", onClick UserClickedDelete, id "delete-button" ] [ text "DELETE" ]
+                    ]
+        ]
+
+
+viewLeftSide : Model -> Html Msg
+viewLeftSide model =
+    let
+        conditionalAttributes : List (Html.Attribute Msg)
+        conditionalAttributes =
+            case ( model.editedFile, model.focusedZone ) of
+                ( Nothing, LeftSide ) ->
+                    [ Events.preventDefaultOn "keydown" (keyDecoderPreventingDefault Source)
+                    ]
+
+                ( Nothing, _ ) ->
+                    [ onFocus (UserChangedFocusedZone LeftSide)
+                    ]
+
+                _ ->
+                    []
+    in
+    div
+        ([ id "container-left"
+         , tabindex 1
+         ]
+            ++ conditionalAttributes
+        )
+    <|
+        viewSource model
+
+
+viewReadOnlyFile : Model -> (File -> Msg) -> Bool -> File -> Html Msg
+viewReadOnlyFile model onClickMsg canBeSearchedAndReplaced file =
+    let
+        className : String
+        className =
+            case file.status of
+                Unselected ->
+                    "filename"
+
+                Edited ->
+                    "filename"
+
+                Selected ->
+                    "filename selected"
+
+                SelectedForDeletion ->
+                    "filename marked-for-deletion"
+
+        fileName : List (Html Msg)
+        fileName =
+            if canBeSearchedAndReplaced then
+                case ( model.sourceSearch, model.sourceReplace ) of
+                    ( "", _ ) ->
+                        [ text file.name ]
+
+                    ( searchedString, "" ) ->
+                        highlight searchedString file.name
+
+                    ( searchedString, replacementString ) ->
+                        file.name
+                            |> String.replace searchedString replacementString
+                            |> highlight replacementString
+
+            else
+                [ text file.name ]
+    in
+    div
+        [ class "file"
+        , onClick (onClickMsg file)
+        ]
+        [ div [ class className ] fileName
+        , div [] [ text <| Filesize.format file.size ]
+        , div [ class "filemodificationdate" ] [ viewDate model file.modTime ]
+        ]
+
+
+viewRightSide : Model -> Html Msg
+viewRightSide model =
+    let
+        conditionalAttributes : List (Html.Attribute Msg)
+        conditionalAttributes =
+            case model.focusedZone of
+                RightSide ->
+                    [ Events.preventDefaultOn "keydown" (keyDecoderPreventingDefault Destination) ]
+
+                _ ->
+                    []
+    in
+    div
+        ([ id "container-right"
+         , tabindex 2
+         , onFocus (UserChangedFocusedZone RightSide)
+         ]
+            ++ conditionalAttributes
+        )
+    <|
+        viewDestination model
+
+
+viewSource : Model -> List (Html Msg)
+viewSource model =
+    [ viewSourceSubdirectories model
+    , viewSourceFiles model
+    ]
 
 
 viewSourceFiles : Model -> Html Msg
@@ -1869,268 +2100,33 @@ viewSourceFiles model =
         ]
 
 
-viewDestinationFiles : Model -> Html Msg
-viewDestinationFiles model =
-    let
-        count : Int
-        count =
-            List.length model.destinationDirectoryFiles
-
-        countAsString : String
-        countAsString =
-            String.fromInt count
-    in
+viewSourceSubdirectories : Model -> Html Msg
+viewSourceSubdirectories model =
     div [ class "panel" ]
-        [ div [ class <| "panel-header" ++ additionalHeaderClass model RightSide ]
-            [ h2 [] [ text <| countAsString ++ inflect count ++ " in destination directory" ]
+        [ div [ class <| "panel-header" ++ additionalHeaderClass model LeftSide ]
+            [ h2 [] [ text <| "Source: " ++ truncatePath model.sourceDirectoryPath ]
+            , span []
+                [ button
+                    [ class "btn"
+                    , onClick (UserClickedReload Source)
+                    ]
+                    [ text "Refresh" ]
+                , button
+                    [ class "btn"
+                    , onClick UserClickedSourceDirectoryButton
+                    ]
+                    [ text "..." ]
+                ]
             ]
-        , viewDestinationFilesFilter model
         , div
             [ class "panel-content" ]
-            (model.destinationDirectoryFiles
-                |> List.filter .satisfiesFilter
+            (model.sourceSubDirectories
                 |> List.sortBy (.name >> String.toLower)
-                |> List.map (viewFile model UserClickedDestinationFile False)
+                |> List.map (viewDirectory model UserClickedSourceDirectory)
             )
         ]
 
 
-inflect : Int -> String
-inflect count =
-    if count > 1 then
-        " files"
-
-    else
-        " file"
-
-
-viewFile : Model -> (File -> Msg) -> Bool -> File -> Html Msg
-viewFile model onClickMsg canBeSearchedAndReplaced file =
-    if file.status == Edited then
-        viewEditedFilename model
-
-    else
-        viewReadOnlyFile model onClickMsg canBeSearchedAndReplaced file
-
-
-highlight : String -> String -> List (Html Msg)
-highlight =
-    Mark.markWith { defaultOptions | minTermLength = 1 }
-
-
-viewReadOnlyFile : Model -> (File -> Msg) -> Bool -> File -> Html Msg
-viewReadOnlyFile model onClickMsg canBeSearchedAndReplaced file =
-    let
-        className : String
-        className =
-            case file.status of
-                Selected ->
-                    "filename selected"
-
-                Unselected ->
-                    "filename"
-
-                Edited ->
-                    "filename"
-
-                SelectedForDeletion ->
-                    "filename marked-for-deletion"
-
-        fileName : List (Html Msg)
-        fileName =
-            if canBeSearchedAndReplaced then
-                case ( model.sourceSearch, model.sourceReplace ) of
-                    ( "", _ ) ->
-                        [ text file.name ]
-
-                    ( searchedString, "" ) ->
-                        highlight searchedString file.name
-
-                    ( searchedString, replacementString ) ->
-                        file.name
-                            |> String.replace searchedString replacementString
-                            |> highlight replacementString
-
-            else
-                [ text file.name ]
-    in
-    div
-        [ class "file"
-        , onClick (onClickMsg file)
-        ]
-        [ div [ class className ] fileName
-        , div [] [ text <| Filesize.format file.size ]
-        , div [ class "filemodificationdate" ] [ viewDate model file.modTime ]
-        ]
-
-
-viewEditedFilename : Model -> Html Msg
-viewEditedFilename model =
-    form [ onSubmit UserSubmittedFilename ]
-        [ input
-            [ class "file-input"
-            , id "filename-input"
-            , onInput UserModifiedFileName
-            , onFocus (UserChangedFocusedZone FileNameEditor)
-            , Events.on "keydown" (simpleKeyDecoder Source)
-            , value model.editedFileName
-            ]
-            []
-        ]
-
-
-viewDate : Model -> Time.Posix -> Html Msg
-viewDate model time =
-    let
-        monthToString : Month -> String
-        monthToString timeMonth =
-            case timeMonth of
-                Jan ->
-                    "01"
-
-                Feb ->
-                    "02"
-
-                Mar ->
-                    "03"
-
-                Apr ->
-                    "04"
-
-                May ->
-                    "05"
-
-                Jun ->
-                    "06"
-
-                Jul ->
-                    "07"
-
-                Aug ->
-                    "08"
-
-                Sep ->
-                    "09"
-
-                Oct ->
-                    "10"
-
-                Nov ->
-                    "11"
-
-                Dec ->
-                    "12"
-
-        day : String
-        day =
-            String.fromInt (Time.toDay model.timezone time)
-                |> String.padLeft 2 '0'
-
-        month : String
-        month =
-            Time.toMonth model.timezone time
-                |> monthToString
-
-        year : String
-        year =
-            String.fromInt (Time.toYear model.timezone time)
-    in
-    text (day ++ "/" ++ month ++ "/" ++ year)
-
-
-viewFooter : Model -> Html Msg
-viewFooter model =
-    let
-        isWaitingForConfirmation : Bool
-        isWaitingForConfirmation =
-            List.length model.filesToDelete > 0
-
-        className : String
-        className =
-            if model.error /= Nothing || isWaitingForConfirmation then
-                "danger"
-
-            else
-                ""
-
-        conditionalAttributes : List (Html.Attribute Msg)
-        conditionalAttributes =
-            if isWaitingForConfirmation then
-                [ Events.preventDefaultOn "keydown" (keyDecoderPreventingDefault Source)
-                , onFocus (UserChangedFocusedZone Confirmation)
-                ]
-
-            else
-                []
-    in
-    footer
-        (class className :: conditionalAttributes)
-        [ case model.error of
-            Nothing ->
-                viewFocusedZone model
-
-            Just errorMsg ->
-                div []
-                    [ text errorMsg
-                    , button [ id "close-error", class "btn", onClick UserClickedCloseError ] [ text "Ok" ]
-                    ]
-        , case model.filesToDelete of
-            [] ->
-                text ""
-
-            _ ->
-                span
-                    []
-                    [ text "This will permanently delete the selected files. This cannot be undone."
-                    , button [ class "btn", onClick UserClickedCancel ] [ text "Cancel" ]
-                    , button [ class "btn", onClick UserClickedDelete, id "delete-button" ] [ text "DELETE" ]
-                    ]
-        ]
-
-
-viewFocusedZone : Model -> Html Msg
-viewFocusedZone model =
-    text <|
-        case model.focusedZone of
-            Confirmation ->
-                "Confirmation _ "
-
-            Filtering ->
-                "Filtering _ "
-
-            LeftSide ->
-                "LeftSide _ "
-
-            FileNameEditor ->
-                "NameEditor _ "
-
-            RightSide ->
-                "RightSide _ "
-
-            SourceSearchReplace ->
-                "SourceSearchReplace _ "
-
-            DirNameEditor ->
-                "DirNameEditor _ "
-
-            ErrorMessage ->
-                "ErrorMessage _ "
-
-
-maxVisiblePathLength : number
-maxVisiblePathLength =
-    45
-
-
-truncatePath : String -> String
-truncatePath fullPath =
-    let
-        actualLength : Int
-        actualLength =
-            String.length fullPath
-    in
-    if actualLength > maxVisiblePathLength then
-        "..." ++ String.dropLeft (actualLength - maxVisiblePathLength) fullPath
-
-    else
-        fullPath
+windowsPathSep : String
+windowsPathSep =
+    "\\"

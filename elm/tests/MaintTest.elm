@@ -6,6 +6,64 @@ import Test exposing (Test, describe, test)
 import Time exposing (millisToPosix)
 
 
+suite : Test
+suite =
+    describe "filterDestinationDirectories"
+        [ test "identifies filenames containing a given string" <|
+            \_ ->
+                let
+                    expected : List File
+                    expected =
+                        [ { dir1 | satisfiesFilter = True }
+                        , dir2
+                        , dir3
+                        , { dir4 | satisfiesFilter = True }
+                        , dir5
+                        ]
+
+                    filteredModel : Model
+                    filteredModel =
+                        { model
+                            | destinationDirectoryFilter = "dirn"
+                            , destinationSubdirectories = allDirs
+                        }
+                            |> filterDestinationDirectories
+                in
+                Expect.equal expected filteredModel.destinationSubdirectories
+        , test "identifies parent path containing a given string" <|
+            \_ ->
+                let
+                    expected : List File
+                    expected =
+                        [ dir1
+                        , dir2
+                        , dir3
+                        , { dir4 | satisfiesFilter = True }
+                        , { dir5 | satisfiesFilter = True }
+                        ]
+
+                    filteredModel : Model
+                    filteredModel =
+                        { model
+                            | destinationDirectoryFilter = "ext"
+                            , destinationSubdirectories = allDirs
+                        }
+                            |> filterDestinationDirectories
+                in
+                Expect.equal expected filteredModel.destinationSubdirectories
+        ]
+
+
+allDirs : List File
+allDirs =
+    [ dir1
+    , dir2
+    , dir3
+    , dir4
+    , dir5
+    ]
+
+
 dir1 : File
 dir1 =
     { isDir = True
@@ -45,64 +103,6 @@ dir5 =
     }
 
 
-allDirs : List File
-allDirs =
-    [ dir1
-    , dir2
-    , dir3
-    , dir4
-    , dir5
-    ]
-
-
 model : Model
 model =
     { defaultModel | destinationSubdirectories = [] }
-
-
-suite : Test
-suite =
-    describe "filterDestinationDirectories"
-        [ test "identifies filenames containing a given string" <|
-            \_ ->
-                let
-                    filteredModel : Model
-                    filteredModel =
-                        { model
-                            | destinationDirectoryFilter = "dirn"
-                            , destinationSubdirectories = allDirs
-                        }
-                            |> filterDestinationDirectories
-
-                    expected : List File
-                    expected =
-                        [ { dir1 | satisfiesFilter = True }
-                        , dir2
-                        , dir3
-                        , { dir4 | satisfiesFilter = True }
-                        , dir5
-                        ]
-                in
-                Expect.equal expected filteredModel.destinationSubdirectories
-        , test "identifies parent path containing a given string" <|
-            \_ ->
-                let
-                    filteredModel : Model
-                    filteredModel =
-                        { model
-                            | destinationDirectoryFilter = "ext"
-                            , destinationSubdirectories = allDirs
-                        }
-                            |> filterDestinationDirectories
-
-                    expected : List File
-                    expected =
-                        [ dir1
-                        , dir2
-                        , dir3
-                        , { dir4 | satisfiesFilter = True }
-                        , { dir5 | satisfiesFilter = True }
-                        ]
-                in
-                Expect.equal expected filteredModel.destinationSubdirectories
-        ]
