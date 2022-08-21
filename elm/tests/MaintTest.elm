@@ -69,7 +69,7 @@ suite =
                     filteredModel : Model
                     filteredModel =
                         { model
-                            | destinationFilter = "dirn"
+                            | destinationDirectoryFilter = "dirn"
                             , destinationSubdirectories = allDirs
                         }
                             |> filterDestinationDirectories
@@ -90,7 +90,7 @@ suite =
                     filteredModel : Model
                     filteredModel =
                         { model
-                            | destinationFilter = "ext"
+                            | destinationDirectoryFilter = "ext"
                             , destinationSubdirectories = allDirs
                         }
                             |> filterDestinationDirectories

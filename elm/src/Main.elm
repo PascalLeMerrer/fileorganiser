@@ -192,7 +192,8 @@ type alias Model =
     { areFilterSynchronized : Bool
     , destinationDirectoryFiles : List File
     , destinationDirectoryPath : String
-    , destinationFilter : String
+    , destinationDirectoryFilter : String
+    , destinationFilesFilter : String
     , destinationSubdirectories : List File
     , editedFile : Maybe File
     , editedDirName : String
@@ -220,7 +221,8 @@ defaultModel =
     { areFilterSynchronized = False
     , destinationDirectoryFiles = []
     , destinationDirectoryPath = ""
-    , destinationFilter = ""
+    , destinationDirectoryFilter = ""
+    , destinationFilesFilter = ""
     , destinationSubdirectories = []
     , editedDirName = ""
     , editedFile = Nothing
@@ -277,13 +279,15 @@ type Msg
     | BackendReturnedSourceDirectoryContent (List File)
     | BackendReturnedSourceDirectoryPath String
     | NoOp
-    | UserChangedDestinationFilter String
+    | UserChangedDestinationDirectoryFilter String
+    | UserChangedDestinationFilesFilter String
     | UserChangedSourceFilter String
     | UserChangedSourceReplace String
     | UserChangedSourceSearch String
     | UserClickedCancel
     | UserClickedClearSourceFilter
-    | UserClickedClearDestinationFilter
+    | UserClickedClearDestinationDirectoryFilter
+    | UserClickedClearDestinationFilesFilter
     | UserClickedCloseError
     | UserClickedDelete
     | UserClickedDestinationDirectory File
@@ -384,6 +388,7 @@ update msg model =
             ( { model
                 | destinationDirectoryFiles = fileList
               }
+                |> filterDestinationFiles
             , Cmd.none
             )
 
@@ -531,14 +536,25 @@ update msg model =
             , Cmd.none
             )
 
-        UserChangedDestinationFilter filteringString ->
-            ( { model | destinationFilter = filteringString }
+        UserChangedDestinationDirectoryFilter filteringString ->
+            ( { model | destinationDirectoryFilter = filteringString }
                 |> filterDestinationDirectories
             , Cmd.none
             )
 
-        UserClickedClearDestinationFilter ->
-            ( { model | destinationFilter = "" } |> filterDestinationDirectories
+        UserChangedDestinationFilesFilter filteringString ->
+            ( { model | destinationFilesFilter = filteringString }
+                |> filterDestinationFiles
+            , Cmd.none
+            )
+
+        UserClickedClearDestinationDirectoryFilter ->
+            ( { model | destinationDirectoryFilter = "" } |> filterDestinationDirectories
+            , Cmd.none
+            )
+
+        UserClickedClearDestinationFilesFilter ->
+            ( { model | destinationFilesFilter = "" } |> filterDestinationFiles
             , Cmd.none
             )
 
@@ -814,7 +830,7 @@ filterDestinationDirectories model =
     let
         words : List String
         words =
-            String.words model.destinationFilter
+            String.words model.destinationDirectoryFilter
     in
     case words of
         [] ->
@@ -829,6 +845,26 @@ filterDestinationDirectories model =
                 | destinationSubdirectories =
                     List.map (\f -> { f | satisfiesFilter = filterByName words f || filterByParentPath words f })
                         model.destinationSubdirectories
+            }
+
+
+filterDestinationFiles : Model -> Model
+filterDestinationFiles model =
+    let
+        words : List String
+        words =
+            String.words model.destinationFilesFilter
+    in
+    case words of
+        [] ->
+            { model
+                | destinationDirectoryFiles = List.map (\f -> { f | satisfiesFilter = True }) model.destinationDirectoryFiles
+            }
+
+        _ ->
+            { model
+                | destinationDirectoryFiles =
+                    List.map (\f -> { f | satisfiesFilter = filterByName words f }) model.destinationDirectoryFiles
             }
 
 
@@ -863,7 +899,7 @@ filterByParentPath filters file =
 synchronizeFilters : Model -> Model
 synchronizeFilters model =
     if model.areFilterSynchronized then
-        { model | destinationFilter = model.sourceFilter }
+        { model | destinationDirectoryFilter = model.sourceFilter }
             |> filterDestinationDirectories
 
     else
@@ -1661,7 +1697,7 @@ viewDestinationSubdirectories model =
                     [ text "..." ]
                 ]
             ]
-        , viewDestinationFilter model
+        , viewDestinationDirectoryFilter model
         , div
             [ class "panel-content" ]
             (newDirEditor
@@ -1674,25 +1710,57 @@ viewDestinationSubdirectories model =
         ]
 
 
-viewDestinationFilter : Model -> Html Msg
-viewDestinationFilter model =
+viewDestinationDirectoryFilter : Model -> Html Msg
+viewDestinationDirectoryFilter model =
     div
         [ class "input-box"
         ]
         [ input
             [ class "input"
             , type_ "text"
-            , id "filtering-right"
-            , onInput UserChangedDestinationFilter
+            , id "filtering-dir-right"
+            , onInput UserChangedDestinationDirectoryFilter
             , onFocus (UserChangedFocusedZone Filtering)
-            , value model.destinationFilter
+            , value model.destinationDirectoryFilter
             , placeholder "Enter one or more words to filter destination directories"
             , disabled model.areFilterSynchronized
             ]
             []
         , button
             [ class "btn"
-            , onClick UserClickedClearDestinationFilter
+            , onClick UserClickedClearDestinationDirectoryFilter
+            , disabled model.areFilterSynchronized
+            ]
+            [ text "Clear" ]
+        , button [ class "btn link", onClick UserClickedSynchronizeButton ]
+            [ if model.areFilterSynchronized then
+                text "Unlink"
+
+              else
+                text "Link"
+            ]
+        ]
+
+
+viewDestinationFilesFilter : Model -> Html Msg
+viewDestinationFilesFilter model =
+    div
+        [ class "input-box"
+        ]
+        [ input
+            [ class "input"
+            , type_ "text"
+            , id "filtering-files-right"
+            , onInput UserChangedDestinationFilesFilter
+            , onFocus (UserChangedFocusedZone Filtering)
+            , value model.destinationFilesFilter
+            , placeholder "Enter one or more words to filter files in destination directory"
+            , disabled model.areFilterSynchronized
+            ]
+            []
+        , button
+            [ class "btn"
+            , onClick UserClickedClearDestinationFilesFilter
             , disabled model.areFilterSynchronized
             ]
             [ text "Clear" ]
@@ -1796,9 +1864,11 @@ viewDestinationFiles model =
         [ div [ class <| "panel-header" ++ additionalHeaderClass model RightSide ]
             [ h2 [] [ text <| countAsString ++ inflect count ++ " in destination directory" ]
             ]
+        , viewDestinationFilesFilter model
         , div
             [ class "panel-content" ]
             (model.destinationDirectoryFiles
+                |> List.filter .satisfiesFilter
                 |> List.sortBy (.name >> String.toLower)
                 |> List.map (viewFile model UserClickedDestinationFile False)
             )
