@@ -148,9 +148,9 @@ type FocusedZone
 type alias Model =
     { applySourceFilterToDestinationDirectories : Bool
     , applySourceFilterToDestinationFiles : Bool
-    , destinationDirectoryFiles : List File
     , destinationDirectoryPath : String
     , destinationDirectoryFilter : String
+    , destinationFiles : List File
     , destinationFilesFilter : String
     , destinationSubdirectories : List File
     , editedFile : Maybe File
@@ -164,8 +164,8 @@ type alias Model =
     , isUndoing : Bool
     , previousFocusedZone : FocusedZone
     , pathSeparator : String
-    , sourceDirectoryFiles : List File
     , sourceDirectoryPath : String
+    , sourceFiles : List File
     , sourceFilter : String
     , sourceReplace : String
     , sourceSearch : String
@@ -226,9 +226,9 @@ defaultModel : Model
 defaultModel =
     { applySourceFilterToDestinationDirectories = False
     , applySourceFilterToDestinationFiles = False
-    , destinationDirectoryFiles = []
     , destinationDirectoryPath = ""
     , destinationDirectoryFilter = ""
+    , destinationFiles = []
     , destinationFilesFilter = ""
     , destinationSubdirectories = []
     , editedFile = Nothing
@@ -242,8 +242,8 @@ defaultModel =
     , isUndoing = False
     , previousFocusedZone = LeftSide
     , pathSeparator = unixPathSep
-    , sourceDirectoryFiles = []
     , sourceDirectoryPath = "."
+    , sourceFiles = []
     , sourceFilter = ""
     , sourceReplace = ""
     , sourceSearch = ""
@@ -336,7 +336,7 @@ changeAllFileStatus model target status =
             let
                 updatedFiles : List File
                 updatedFiles =
-                    model.sourceDirectoryFiles
+                    model.sourceFiles
                         |> List.map
                             (\f ->
                                 if f.satisfiesFilter then
@@ -347,7 +347,7 @@ changeAllFileStatus model target status =
                             )
             in
             ( { model
-                | sourceDirectoryFiles = updatedFiles
+                | sourceFiles = updatedFiles
               }
                 |> filterSourceFiles
             , Cmd.none
@@ -357,12 +357,12 @@ changeAllFileStatus model target status =
             let
                 updatedFiles : List File
                 updatedFiles =
-                    model.destinationDirectoryFiles
+                    model.destinationFiles
                         |> List.map
                             (\f -> { f | status = status })
             in
             ( { model
-                | destinationDirectoryFiles = updatedFiles
+                | destinationFiles = updatedFiles
               }
             , Cmd.none
             )
@@ -371,7 +371,7 @@ changeAllFileStatus model target status =
 changeStatusOfSelectedDestinationFiles : FileStatus -> Model -> Model
 changeStatusOfSelectedDestinationFiles fileStatus model =
     { model
-        | destinationDirectoryFiles =
+        | destinationFiles =
             List.map
                 (\file ->
                     if file.status == Selected then
@@ -380,14 +380,14 @@ changeStatusOfSelectedDestinationFiles fileStatus model =
                     else
                         file
                 )
-                model.destinationDirectoryFiles
+                model.destinationFiles
     }
 
 
 changeStatusOfSelectedSourceFiles : FileStatus -> Model -> Model
 changeStatusOfSelectedSourceFiles fileStatus model =
     { model
-        | sourceDirectoryFiles =
+        | sourceFiles =
             List.map
                 (\file ->
                     if file.satisfiesFilter && file.status == Selected then
@@ -396,7 +396,7 @@ changeStatusOfSelectedSourceFiles fileStatus model =
                     else
                         file
                 )
-                model.sourceDirectoryFiles
+                model.sourceFiles
     }
         |> filterSourceFiles
 
@@ -538,13 +538,13 @@ filterDestinationFiles model =
     case words of
         [] ->
             { model
-                | destinationDirectoryFiles = List.map (\f -> { f | satisfiesFilter = True }) model.destinationDirectoryFiles
+                | destinationFiles = List.map (\f -> { f | satisfiesFilter = True }) model.destinationFiles
             }
 
         _ ->
             { model
-                | destinationDirectoryFiles =
-                    List.map (\f -> { f | satisfiesFilter = filterByName words f }) model.destinationDirectoryFiles
+                | destinationFiles =
+                    List.map (\f -> { f | satisfiesFilter = filterByName words f }) model.destinationFiles
             }
 
 
@@ -563,13 +563,13 @@ filterSourceFiles model =
     case words of
         [] ->
             { model
-                | sourceDirectoryFiles = List.map (\f -> { f | satisfiesFilter = True }) model.sourceDirectoryFiles
+                | sourceFiles = List.map (\f -> { f | satisfiesFilter = True }) model.sourceFiles
             }
 
         _ ->
             { model
-                | sourceDirectoryFiles =
-                    List.map (\f -> { f | satisfiesFilter = filterByName words f }) model.sourceDirectoryFiles
+                | sourceFiles =
+                    List.map (\f -> { f | satisfiesFilter = filterByName words f }) model.sourceFiles
             }
 
 
@@ -628,14 +628,14 @@ moveSelectedFiles model =
         ( filesToMove, destination ) =
             case model.focusedZone of
                 RightSide ->
-                    ( model.destinationDirectoryFiles
+                    ( model.destinationFiles
                         |> List.filter (\f -> f.status == Selected)
                         |> List.map (\file -> file.parentPath ++ model.pathSeparator ++ file.name)
                     , model.sourceDirectoryPath
                     )
 
                 _ ->
-                    ( model.sourceDirectoryFiles
+                    ( model.sourceFiles
                         |> filterSelectedFiles
                         |> List.map (\file -> file.parentPath ++ model.pathSeparator ++ file.name)
                     , model.destinationDirectoryPath
@@ -667,11 +667,11 @@ openSelectedFile model target =
         fileToOpen =
             case target of
                 Source ->
-                    model.sourceDirectoryFiles
+                    model.sourceFiles
                         |> List.Extra.find (\f -> f.satisfiesFilter && f.status == Selected)
 
                 Destination ->
-                    model.destinationDirectoryFiles
+                    model.destinationFiles
                         |> List.Extra.find (\f -> f.status == Selected)
     in
     case fileToOpen of
@@ -714,7 +714,7 @@ prepareSelectedFilesForRemoval model =
     case model.focusedZone of
         LeftSide ->
             ( { model
-                | filesToDelete = filterSelectedFiles model.sourceDirectoryFiles
+                | filesToDelete = filterSelectedFiles model.sourceFiles
                 , focusedZone = Confirmation
                 , previousFocusedZone = model.focusedZone
               }
@@ -725,7 +725,7 @@ prepareSelectedFilesForRemoval model =
         RightSide ->
             ( { model
                 | filesToDelete =
-                    model.destinationDirectoryFiles
+                    model.destinationFiles
                         |> List.filter (\f -> f.status == Selected)
                 , focusedZone = Confirmation
                 , previousFocusedZone = model.focusedZone
@@ -768,13 +768,13 @@ processKeyboardShortcut model target event =
                     let
                         sourceDirectoryFiles : List File
                         sourceDirectoryFiles =
-                            model.sourceDirectoryFiles
+                            model.sourceFiles
                                 |> List.Extra.updateIf (\f -> f.status == Edited) (\f -> { f | status = Selected })
                     in
                     { model
                         | editedFile = Nothing
                         , editedFileName = ""
-                        , sourceDirectoryFiles = sourceDirectoryFiles
+                        , sourceFiles = sourceDirectoryFiles
                     }
                         |> restoreFocus
 
@@ -906,7 +906,7 @@ renameSelectedSourceFile model =
     let
         fileToEdit : Maybe File
         fileToEdit =
-            model.sourceDirectoryFiles
+            model.sourceFiles
                 |> List.Extra.find (\f -> f.satisfiesFilter && f.status == Selected)
     in
     case fileToEdit of
@@ -914,13 +914,13 @@ renameSelectedSourceFile model =
             let
                 sourceDirectoryFiles : List File
                 sourceDirectoryFiles =
-                    model.sourceDirectoryFiles
+                    model.sourceFiles
                         |> List.Extra.updateIf (\f -> f == file) (\f -> { f | status = Edited })
             in
             ( { model
                 | editedFile = Just file
                 , editedFileName = file.name
-                , sourceDirectoryFiles = sourceDirectoryFiles
+                , sourceFiles = sourceDirectoryFiles
               }
             , focusOn "filename-input" NoOp
             )
@@ -1051,7 +1051,7 @@ toggleSelectionStatus file =
             { file | status = Unselected }
 
         SelectedForDeletion ->
-            -- TODO  Remove from the list of files selected for deletion
+            -- TODO  Remove from the list of files selected for deletion?
             { file | status = Selected }
 
 
@@ -1219,7 +1219,7 @@ update msg model =
 
         BackendReturnedDestinationFiles fileList ->
             ( { model
-                | destinationDirectoryFiles = fileList
+                | destinationFiles = fileList
               }
                 |> filterDestinationFiles
             , Cmd.none
@@ -1319,7 +1319,7 @@ update msg model =
                     , focusedZone = LeftSide
                     , history = commands :: model.history
                     , previousFocusedZone = model.focusedZone
-                    , sourceDirectoryFiles =
+                    , sourceFiles =
                         List.map
                             (\f ->
                                 if f.status == Edited then
@@ -1328,7 +1328,7 @@ update msg model =
                                 else
                                     f
                             )
-                            model.sourceDirectoryFiles
+                            model.sourceFiles
                 }
             , Cmd.batch
                 [ getSourceDirectoryContent model.sourceDirectoryPath
@@ -1342,7 +1342,7 @@ update msg model =
                     List.partition .isDir directoryContent
             in
             ( { model
-                | sourceDirectoryFiles = fileList
+                | sourceFiles = fileList
                 , sourceSubDirectories = dirList
               }
                 |> filterSourceFiles
@@ -1401,11 +1401,11 @@ update msg model =
                         file
             in
             ( { model
-                | destinationDirectoryFiles = List.map unselectForDeletion model.destinationDirectoryFiles
+                | destinationFiles = List.map unselectForDeletion model.destinationFiles
                 , filesToDelete = []
                 , focusedZone = LeftSide
                 , previousFocusedZone = model.focusedZone
-                , sourceDirectoryFiles = List.map unselectForDeletion model.sourceDirectoryFiles
+                , sourceFiles = List.map unselectForDeletion model.sourceFiles
               }
             , focusOn "container-left" NoOp
             )
@@ -1465,9 +1465,9 @@ update msg model =
 
                 updatedDestinationFiles : List File
                 updatedDestinationFiles =
-                    List.Extra.updateIf ((==) file) (\_ -> newFile) model.destinationDirectoryFiles
+                    List.Extra.updateIf ((==) file) (\_ -> newFile) model.destinationFiles
             in
-            ( { model | destinationDirectoryFiles = updatedDestinationFiles }
+            ( { model | destinationFiles = updatedDestinationFiles }
             , Cmd.none
             )
 
@@ -1478,7 +1478,7 @@ update msg model =
             let
                 renamings : List Renaming
                 renamings =
-                    model.sourceDirectoryFiles
+                    model.sourceFiles
                         |> List.filterMap (nameReplacement model.sourceSearch model.sourceReplace)
             in
             ( { model | sourceReplace = "" }
@@ -1511,12 +1511,12 @@ update msg model =
 
                 updatedSourceFiles : List File
                 updatedSourceFiles =
-                    List.Extra.updateIf ((==) file) (\_ -> newFile) model.sourceDirectoryFiles
+                    List.Extra.updateIf ((==) file) (\_ -> newFile) model.sourceFiles
             in
             ( { model
                 | focusedZone = LeftSide
                 , previousFocusedZone = model.focusedZone
-                , sourceDirectoryFiles = updatedSourceFiles
+                , sourceFiles = updatedSourceFiles
               }
                 |> filterSourceFiles
             , focusOn "container-left" NoOp
@@ -1568,7 +1568,7 @@ update msg model =
             let
                 isConflicting : Bool
                 isConflicting =
-                    List.any (\f -> f.name == model.editedFileName) model.sourceDirectoryFiles
+                    List.any (\f -> f.name == model.editedFileName) model.sourceFiles
 
                 isNameEmpty : Bool
                 isNameEmpty =
@@ -1711,7 +1711,7 @@ viewDestinationFiles model =
     let
         count : Int
         count =
-            List.length model.destinationDirectoryFiles
+            List.length model.destinationFiles
 
         countAsString : String
         countAsString =
@@ -1724,7 +1724,7 @@ viewDestinationFiles model =
         , viewDestinationFilesFilter model
         , div
             [ class "panel-content" ]
-            (model.destinationDirectoryFiles
+            (model.destinationFiles
                 |> List.filter .satisfiesFilter
                 |> List.sortBy (.name >> String.toLower)
                 |> List.map (viewFile model UserClickedDestinationFile False)
@@ -2039,7 +2039,7 @@ viewSourceFiles model =
     let
         count : Int
         count =
-            List.length model.sourceDirectoryFiles
+            List.length model.sourceFiles
 
         countAsString : String
         countAsString =
@@ -2092,7 +2092,7 @@ viewSourceFiles model =
             ]
         , div
             [ class "panel-content" ]
-            (model.sourceDirectoryFiles
+            (model.sourceFiles
                 |> List.filter .satisfiesFilter
                 |> List.sortBy (.name >> String.toLower)
                 |> List.map (viewFile model UserClickedSourceFile True)
