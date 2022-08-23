@@ -368,14 +368,14 @@ changeAllFileStatus model target status =
             )
 
 
-changeStatusOfSelectedDestinationFiles : FileStatus -> Model -> Model
-changeStatusOfSelectedDestinationFiles fileStatus model =
+changeStatusOfDestinationFiles : FileStatus -> FileStatus -> Model -> Model
+changeStatusOfDestinationFiles fromStatus toStatus model =
     { model
         | destinationFiles =
             List.map
                 (\file ->
-                    if file.status == Selected then
-                        { file | status = fileStatus }
+                    if file.status == fromStatus then
+                        { file | status = toStatus }
 
                     else
                         file
@@ -384,14 +384,14 @@ changeStatusOfSelectedDestinationFiles fileStatus model =
     }
 
 
-changeStatusOfSelectedSourceFiles : FileStatus -> Model -> Model
-changeStatusOfSelectedSourceFiles fileStatus model =
+changeStatusOfSourceFiles : FileStatus -> FileStatus -> Model -> Model
+changeStatusOfSourceFiles fromStatus toStatus model =
     { model
         | sourceFiles =
             List.map
                 (\file ->
-                    if file.satisfiesFilter && file.status == Selected then
-                        { file | status = fileStatus }
+                    if file.satisfiesFilter && file.status == fromStatus then
+                        { file | status = toStatus }
 
                     else
                         file
@@ -718,7 +718,7 @@ prepareSelectedFilesForRemoval model =
                 , focusedZone = Confirmation
                 , previousFocusedZone = model.focusedZone
               }
-                |> changeStatusOfSelectedSourceFiles SelectedForDeletion
+                |> changeStatusOfSourceFiles Selected SelectedForDeletion
             , focusOn "delete-button" NoOp
             )
 
@@ -730,7 +730,7 @@ prepareSelectedFilesForRemoval model =
                 , focusedZone = Confirmation
                 , previousFocusedZone = model.focusedZone
               }
-                |> changeStatusOfSelectedDestinationFiles SelectedForDeletion
+                |> changeStatusOfDestinationFiles Selected SelectedForDeletion
             , focusOn "delete-button" NoOp
             )
 
@@ -743,6 +743,7 @@ processConfirmationShortcuts model event =
     case ( event.keyCode, event.ctrlKey, event.metaKey ) of
         ( Key.Escape, False, False ) ->
             ( { model | filesToDelete = [], focusedZone = LeftSide }
+                |> unmarkFilesForDeletion
             , focusOn "container-left" NoOp
             )
 
@@ -1152,6 +1153,13 @@ undoRenaming model cmds command =
 unixPathSep : String
 unixPathSep =
     "/"
+
+
+unmarkFilesForDeletion : Model -> Model
+unmarkFilesForDeletion model =
+    model
+        |> changeStatusOfDestinationFiles SelectedForDeletion Selected
+        |> changeStatusOfSourceFiles SelectedForDeletion Selected
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
