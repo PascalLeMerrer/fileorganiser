@@ -73,12 +73,12 @@ h2 {
   background-color: darkgrey;
 }
 
-#deleteButton {
+#delete-button {
   background-color: red;
   color: white;
   font-weight: bold;
 }
-#deleteButton:hover {
+#delete-button:hover {
   background-color: #801515;
 }
 
