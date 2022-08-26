@@ -1242,16 +1242,20 @@ update msg model =
             , Cmd.none
             )
 
-        BackendReturnedCreatedDirectory _ ->
+        BackendReturnedCreatedDirectory dir ->
+            let
+                newDirPath =
+                    model.destinationDirectoryPath ++ model.pathSeparator ++ dir.name
+            in
             ( { model
                 | editedDirName = ""
                 , focusedZone = RightSide
                 , isCreatingDirectory = False
                 , previousFocusedZone = model.focusedZone
               }
+                |> changeDestinationDirectory newDirPath
             , Cmd.batch
-                -- TODO change to newly created dir?
-                [ getDestinationSubdirectories model.destinationDirectoryPath
+                [ getDestinationSubdirectories newDirPath
                 , focusOn "container-right" NoOp
                 ]
             )
