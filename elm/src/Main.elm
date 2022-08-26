@@ -152,6 +152,7 @@ type alias Model =
     , destinationDirectoryFilter : String
     , destinationFiles : List File
     , destinationFilesFilter : String
+    , destinationNavigationHistory : List String
     , destinationSubdirectories : List File
     , editedFile : Maybe File
     , editedDirName : String
@@ -167,6 +168,7 @@ type alias Model =
     , sourceDirectoryPath : String
     , sourceFiles : List File
     , sourceFilter : String
+    , sourceNavigationHistory : List String
     , sourceReplace : String
     , sourceSearch : String
     , sourceSubDirectories : List File
@@ -230,6 +232,7 @@ defaultModel =
     , destinationDirectoryFilter = ""
     , destinationFiles = []
     , destinationFilesFilter = ""
+    , destinationNavigationHistory = []
     , destinationSubdirectories = []
     , editedFile = Nothing
     , editedDirName = ""
@@ -245,6 +248,7 @@ defaultModel =
     , sourceDirectoryPath = "."
     , sourceFiles = []
     , sourceFilter = ""
+    , sourceNavigationHistory = []
     , sourceReplace = ""
     , sourceSearch = ""
     , sourceSubDirectories = []
@@ -366,6 +370,22 @@ changeAllFileStatus model target status =
               }
             , Cmd.none
             )
+
+
+changeDestinationDirectory : String -> Model -> Model
+changeDestinationDirectory path model =
+    { model
+        | destinationDirectoryPath = path
+        , destinationNavigationHistory = model.destinationDirectoryPath :: model.destinationNavigationHistory
+    }
+
+
+changeSourceDirectory : String -> Model -> Model
+changeSourceDirectory path model =
+    { model
+        | sourceDirectoryPath = path
+        , sourceNavigationHistory = model.sourceDirectoryPath :: model.sourceNavigationHistory
+    }
 
 
 changeStatusOfDestinationFiles : FileStatus -> FileStatus -> Model -> Model
@@ -578,6 +598,55 @@ filterSourceFiles model =
 focusOn : String -> msg -> Cmd msg
 focusOn elementId msg =
     Browser.Dom.focus elementId |> Task.attempt (\_ -> msg)
+
+
+
+{- navigate t o the previous dir in history -}
+
+
+goBack : Model -> Target -> ( Model, Cmd Msg )
+goBack model target =
+    case target of
+        Source ->
+            let
+                previousDir =
+                    model.sourceNavigationHistory
+                        |> List.head
+                        |> Maybe.withDefault ""
+
+                history =
+                    model.sourceNavigationHistory
+                        |> List.drop 1
+            in
+            if String.isEmpty previousDir then
+                ( model, Cmd.none )
+
+            else
+                ( { model | sourceNavigationHistory = history, sourceDirectoryPath = previousDir }
+                , getSourceDirectoryContent previousDir
+                )
+
+        Destination ->
+            let
+                previousDir =
+                    model.destinationNavigationHistory
+                        |> List.head
+                        |> Maybe.withDefault ""
+
+                history =
+                    model.destinationNavigationHistory
+                        |> List.drop 1
+            in
+            if String.isEmpty previousDir then
+                ( model, Cmd.none )
+
+            else
+                ( { model | destinationNavigationHistory = history, destinationDirectoryPath = previousDir }
+                , Cmd.batch
+                    [ getDestinationSubdirectories previousDir
+                    , getDestinationDirectoryFiles previousDir
+                    ]
+                )
 
 
 highlight : String -> String -> List (Html Msg)
@@ -832,6 +901,9 @@ processMainShortcuts model target event =
         case ( event.keyCode, event.shiftKey ) of
             ( Key.F, False ) ->
                 openSelectedFolder model target
+
+            ( Key.Left, _ ) ->
+                goBack model target
 
             ( Key.M, False ) ->
                 moveSelectedFiles model
@@ -1218,7 +1290,7 @@ update msg model =
                 ( model, Cmd.none )
 
             else
-                ( { model | destinationDirectoryPath = path }
+                ( model |> changeDestinationDirectory path
                 , Cmd.batch
                     [ getDestinationSubdirectories path
                     , getDestinationDirectoryFiles path
@@ -1363,7 +1435,7 @@ update msg model =
                 ( model, Cmd.none )
 
             else
-                ( { model | sourceDirectoryPath = path }
+                ( model |> changeSourceDirectory path
                 , getSourceDirectoryContent path
                 )
 
@@ -1455,7 +1527,7 @@ update msg model =
                         _ ->
                             model.destinationDirectoryPath ++ model.pathSeparator ++ file.name
             in
-            ( { model | destinationDirectoryPath = newDestinationPath }
+            ( model |> changeDestinationDirectory newDestinationPath
             , Cmd.batch
                 [ getDestinationDirectoryFiles newDestinationPath
                 , getDestinationSubdirectories newDestinationPath
@@ -1504,7 +1576,7 @@ update msg model =
                         _ ->
                             file.parentPath ++ model.pathSeparator ++ file.name
             in
-            ( { model | sourceDirectoryPath = newSourcePath }
+            ( model |> changeSourceDirectory newSourcePath
             , getSourceDirectoryContent newSourcePath
             )
 
