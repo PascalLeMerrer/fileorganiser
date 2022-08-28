@@ -520,6 +520,20 @@ fileDecoder =
         |> hardcoded Unselected
 
 
+isFileNotFoundError : Model -> Target -> String -> Bool
+isFileNotFoundError model target errorMsg =
+    let
+        dir =
+            case target of
+                Source ->
+                    model.sourceDirectoryPath
+
+                Destination ->
+                    model.destinationDirectoryPath
+    in
+    errorMsg == "open " ++ dir ++ ": no such file or directory"
+
+
 filterByName : List String -> File -> Bool
 filterByName filters file =
     if file.name == ".." then
@@ -1310,12 +1324,26 @@ update msg model =
             )
 
         BackendReturnedError errorMsg ->
-            ( { model
+            let
+                ( updatedModel, cmd ) =
+                    if isFileNotFoundError model Source errorMsg then
+                        goBack model Source
+
+                    else if isFileNotFoundError model Destination errorMsg then
+                        goBack model Destination
+
+                    else
+                        ( model, Cmd.none )
+            in
+            ( { updatedModel
                 | error = Just errorMsg
                 , focusedZone = ErrorMessage
                 , previousFocusedZone = model.focusedZone
               }
-            , focusOn "close-error" NoOp
+            , Cmd.batch
+                [ focusOn "close-error" NoOp
+                , cmd
+                ]
             )
 
         BackendReturnedMovedFiles files ->
