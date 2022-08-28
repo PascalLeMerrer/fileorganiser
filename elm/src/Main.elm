@@ -520,18 +520,34 @@ fileDecoder =
         |> hardcoded Unselected
 
 
-isFileNotFoundError : Model -> Target -> String -> Bool
-isFileNotFoundError model target errorMsg =
+fileCount : Model -> Target -> String
+fileCount model target =
     let
-        dir =
-            case target of
-                Source ->
-                    model.sourceDirectoryPath
+        totalCount : Int
+        totalCount =
+            List.length model.sourceFiles
 
-                Destination ->
-                    model.destinationDirectoryPath
+        filteredCount =
+            List.Extra.count .satisfiesFilter <|
+                case target of
+                    Destination ->
+                        model.destinationFiles
+
+                    Source ->
+                        model.sourceFiles
     in
-    errorMsg == "open " ++ dir ++ ": no such file or directory"
+    if filteredCount == totalCount then
+        String.fromInt filteredCount
+            ++ inflect totalCount
+            ++ " in directory"
+
+    else
+        String.fromInt filteredCount
+            ++ " (on a total of "
+            ++ String.fromInt totalCount
+            ++ ")"
+            ++ inflect totalCount
+            ++ " in directory"
 
 
 filterByName : List String -> File -> Bool
@@ -689,6 +705,20 @@ init _ =
         , getCurrentDirectoryPath ()
         ]
     )
+
+
+isFileNotFoundError : Model -> Target -> String -> Bool
+isFileNotFoundError model target errorMsg =
+    let
+        dir =
+            case target of
+                Source ->
+                    model.sourceDirectoryPath
+
+                Destination ->
+                    model.destinationDirectoryPath
+    in
+    errorMsg == "open " ++ dir ++ ": no such file or directory"
 
 
 keyDecoderPreventingDefault : Target -> Json.Decode.Decoder ( Msg, Bool )
@@ -1820,18 +1850,9 @@ viewDestinationDirectoryFilter model =
 
 viewDestinationFiles : Model -> Html Msg
 viewDestinationFiles model =
-    let
-        count : Int
-        count =
-            List.length model.destinationFiles
-
-        countAsString : String
-        countAsString =
-            String.fromInt count
-    in
     div [ class "panel" ]
         [ div [ class <| "panel-header" ++ additionalHeaderClass model RightSide ]
-            [ h2 [] [ text <| countAsString ++ inflect count ++ " in destination directory" ]
+            [ h2 [] [ text <| fileCount model Destination ]
             ]
         , viewDestinationFilesFilter model
         , div
@@ -2148,18 +2169,9 @@ viewSource model =
 
 viewSourceFiles : Model -> Html Msg
 viewSourceFiles model =
-    let
-        count : Int
-        count =
-            List.length model.sourceFiles
-
-        countAsString : String
-        countAsString =
-            String.fromInt count
-    in
     div [ class "panel" ]
         [ div [ class <| "panel-header" ++ additionalHeaderClass model LeftSide ]
-            [ h2 [] [ text <| countAsString ++ inflect count ++ " in source directory" ]
+            [ h2 [] [ text <| fileCount model Source ]
             , div [ class "search-form" ]
                 [ input
                     [ class "input"
