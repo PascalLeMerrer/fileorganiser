@@ -1,4 +1,4 @@
-port module Main exposing (Command, File, FileStatus(..), FocusedZone, Model, Msg, Operation, defaultModel, filterDestinationDirectories, main)
+port module Main exposing (Command, File, FileStatus(..), FocusedZone, Model, Msg, Operation, defaultDir, defaultModel, filterDestinationDirectories, main, pathElements, withName, withParentPath)
 
 import Browser
 import Browser.Dom
@@ -15,7 +15,7 @@ import Keyboard.Key as Key
 import List.Extra
 import String.Mark as Mark exposing (defaultOptions)
 import Task
-import Time exposing (Month(..), Posix)
+import Time exposing (Month(..), Posix, millisToPosix)
 
 
 
@@ -115,6 +115,10 @@ type alias Command =
     }
 
 
+
+-- TODO move to its own module
+
+
 type alias File =
     { isDir : Bool
     , mode : Int
@@ -125,6 +129,29 @@ type alias File =
     , size : Int
     , status : FileStatus
     }
+
+
+defaultDir : File
+defaultDir =
+    { isDir = True
+    , mode = 777
+    , modTime = millisToPosix 0
+    , name = ""
+    , parentPath = ""
+    , satisfiesFilter = False
+    , size = 0
+    , status = Unselected
+    }
+
+
+withName : String -> File -> File
+withName name file =
+    { file | name = name }
+
+
+withParentPath : String -> File -> File
+withParentPath path file =
+    { file | parentPath = path }
 
 
 type FileStatus
@@ -820,6 +847,56 @@ parentDir model path =
                 |> Maybe.withDefault (String.length path)
     in
     String.slice 0 index path
+
+
+pathElements : Model -> List File -> String -> List File
+pathElements model acc path =
+    if path == "." then
+        []
+
+    else
+        pathElementsRecursive model acc path
+            |> List.reverse
+
+
+pathElementsRecursive : Model -> List File -> String -> List File
+pathElementsRecursive model acc path =
+    let
+        endIndex =
+            String.length path
+
+        lastPartIndex =
+            1
+                + (String.indexes model.pathSeparator path
+                    |> List.maximum
+                    |> Maybe.withDefault endIndex
+                  )
+
+        leaf : String
+        leaf =
+            String.slice lastPartIndex endIndex path
+
+        parentPath =
+            parentDir model path
+
+        file =
+            defaultDir
+                |> withName leaf
+                |> withParentPath parentPath
+    in
+    if String.length parentPath > 0 then
+        file
+            :: pathElementsRecursive model acc parentPath
+
+    else
+        file
+            :: acc
+
+
+toString : List File -> String
+toString files =
+    List.map (\f -> "(" ++ f.name ++ ", " ++ f.parentPath ++ ")") files
+        |> String.concat
 
 
 prepareSelectedFilesForRemoval : Model -> ( Model, Cmd Msg )
@@ -1910,7 +1987,10 @@ viewDestinationSubdirectories model =
     in
     div [ class "panel" ]
         [ div [ class <| "panel-header" ++ additionalHeaderClass model RightSide ]
-            [ h2 [] [ text <| "Destination: " ++ truncatePath model.destinationDirectoryPath ]
+            [ h2 []
+                [ text <| "Destination: "
+                , viewPath model model.destinationDirectoryPath
+                ]
             , span []
                 [ button
                     [ class "btn"
@@ -2091,6 +2171,24 @@ viewLeftSide model =
         viewSource model
 
 
+viewPath : Model -> String -> Html Msg
+viewPath model path =
+    let
+        elements : List File
+        elements =
+            pathElements model [] path
+    in
+    div [] <|
+        List.map
+            (\element ->
+                span []
+                    [ span [ onClick <| UserClickedSourceDirectory element ] [ text element.name ]
+                    , span [] [ text model.pathSeparator ]
+                    ]
+            )
+            elements
+
+
 viewReadOnlyFile : Model -> (File -> Msg) -> Bool -> File -> Html Msg
 viewReadOnlyFile model onClickMsg canBeSearchedAndReplaced file =
     let
@@ -2228,7 +2326,10 @@ viewSourceSubdirectories : Model -> Html Msg
 viewSourceSubdirectories model =
     div [ class "panel" ]
         [ div [ class <| "panel-header" ++ additionalHeaderClass model LeftSide ]
-            [ h2 [] [ text <| "Source: " ++ truncatePath model.sourceDirectoryPath ]
+            [ h2 []
+                [ text <| "Source "
+                , viewPath model model.sourceDirectoryPath
+                ]
             , span []
                 [ button
                     [ class "btn"
