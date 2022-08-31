@@ -131,29 +131,6 @@ type alias File =
     }
 
 
-defaultDir : File
-defaultDir =
-    { isDir = True
-    , mode = 777
-    , modTime = millisToPosix 0
-    , name = ""
-    , parentPath = ""
-    , satisfiesFilter = False
-    , size = 0
-    , status = Unselected
-    }
-
-
-withName : String -> File -> File
-withName name file =
-    { file | name = name }
-
-
-withParentPath : String -> File -> File
-withParentPath path file =
-    { file | parentPath = path }
-
-
 type FileStatus
     = Unselected
     | Edited
@@ -212,7 +189,7 @@ type Msg
     | BackendReturnedDestinationFiles (List File)
     | BackendReturnedError String
     | BackendReturnedMovedFiles (List File)
-    | BackendReturnedRemovedFile File String
+    | BackendReturnedRemovedFile
     | BackendReturnedRenamedFiles (List File) (List String)
     | BackendReturnedSourceDirectoryContent (List File)
     | BackendReturnedSourceDirectoryPath String
@@ -249,6 +226,19 @@ type Msg
 type Operation
     = Move
     | Rename
+
+
+defaultDir : File
+defaultDir =
+    { isDir = True
+    , mode = 777
+    , modTime = millisToPosix 0
+    , name = ""
+    , parentPath = ""
+    , satisfiesFilter = False
+    , size = 0
+    , status = Unselected
+    }
 
 
 defaultModel : Model
@@ -306,10 +296,6 @@ filterDestinationDirectories model =
             }
 
 
-
--- MODEL
-
-
 main : Program () Model Msg
 main =
     Browser.element
@@ -318,6 +304,56 @@ main =
         , update = update
         , view = view
         }
+
+
+pathElements : Model -> List File -> String -> List File
+pathElements model acc path =
+    if path == "." then
+        []
+
+    else
+        pathElementsRecursive model acc path
+            |> List.reverse
+
+
+
+-- MODEL
+
+
+truncateConcatenatedNames : Int -> List File -> List File
+truncateConcatenatedNames maxLength elements =
+    let
+        currentLength : List File -> Int
+        currentLength acc =
+            acc
+                |> List.map (.name >> String.length)
+                |> List.sum
+    in
+    elements
+        |> List.reverse
+        |> List.foldl
+            (\element acc ->
+                if currentLength acc + String.length element.name <= maxLength then
+                    element :: acc
+
+                else
+                    acc
+            )
+            []
+
+
+withName : String -> File -> File
+withName name file =
+    { file | name = name }
+
+
+withParentPath : String -> File -> File
+withParentPath path file =
+    { file | parentPath = path }
+
+
+
+-- UPDATE
 
 
 additionalHeaderClass : Model -> FocusedZone -> String
@@ -354,10 +390,6 @@ applyRenaming model renamings =
                     )
     in
     renameFiles encodedRenamings
-
-
-
--- UPDATE
 
 
 changeAllFileStatus : Model -> Target -> FileStatus -> ( Model, Cmd Msg )
@@ -490,25 +522,18 @@ decodeFileList msg value =
             BackendReturnedError (Json.Decode.errorToString error)
 
 
-decodeFileWithPreviousName : (File -> String -> Msg) -> Json.Encode.Value -> Msg
+decodeFileWithPreviousName : Msg -> Json.Encode.Value -> Msg
 decodeFileWithPreviousName msg value =
     let
         decodedFile : Result Json.Decode.Error File
         decodedFile =
             Json.Decode.decodeValue fileDecoder value
-
-        decodedPreviousName : Result Json.Decode.Error String
-        decodedPreviousName =
-            Json.Decode.decodeValue (Json.Decode.field "PreviousName" Json.Decode.string) value
     in
-    case ( decodedFile, decodedPreviousName ) of
-        ( Ok file, Ok previousName ) ->
-            msg file previousName
+    case decodedFile of
+        Ok _ ->
+            msg
 
-        ( Ok file, Err _ ) ->
-            msg file ""
-
-        ( Err error, _ ) ->
+        Err error ->
             BackendReturnedError (Json.Decode.errorToString error)
 
 
@@ -534,34 +559,22 @@ decodeRenamingList msg value =
             BackendReturnedError (Json.Decode.errorToString error)
 
 
-fileDecoder : Decoder File
-fileDecoder =
-    Json.Decode.succeed File
-        |> required "IsDir" Json.Decode.bool
-        |> required "Mode" Json.Decode.int
-        |> required "ModTime" Iso8601.decoder
-        |> required "Name" Json.Decode.string
-        |> required "DirPath" Json.Decode.string
-        |> hardcoded False
-        |> required "Size" Json.Decode.int
-        |> hardcoded Unselected
-
-
 fileCount : Model -> Target -> String
 fileCount model target =
     let
-        totalCount : Int
-        totalCount =
-            List.length model.sourceFiles
-
+        filteredCount : Int
         filteredCount =
             List.Extra.count .satisfiesFilter <|
                 case target of
+                    Source ->
+                        model.sourceFiles
+
                     Destination ->
                         model.destinationFiles
 
-                    Source ->
-                        model.sourceFiles
+        totalCount : Int
+        totalCount =
+            List.length model.sourceFiles
     in
     if filteredCount == totalCount then
         String.fromInt filteredCount
@@ -575,6 +588,19 @@ fileCount model target =
             ++ ")"
             ++ inflect totalCount
             ++ " in directory"
+
+
+fileDecoder : Decoder File
+fileDecoder =
+    Json.Decode.succeed File
+        |> required "IsDir" Json.Decode.bool
+        |> required "Mode" Json.Decode.int
+        |> required "ModTime" Iso8601.decoder
+        |> required "Name" Json.Decode.string
+        |> required "DirPath" Json.Decode.string
+        |> hardcoded False
+        |> required "Size" Json.Decode.int
+        |> hardcoded Unselected
 
 
 filterByName : List String -> File -> Bool
@@ -630,6 +656,10 @@ filterSelectedFiles files =
     List.filter (\f -> f.satisfiesFilter && f.status == Selected) files
 
 
+
+{- navigate t o the previous dir in history -}
+
+
 filterSourceFiles : Model -> Model
 filterSourceFiles model =
     let
@@ -658,7 +688,7 @@ focusOn elementId msg =
 
 
 
-{- navigate t o the previous dir in history -}
+-- TODO allow renaming destination files
 
 
 goBack : Model -> Target -> ( Model, Cmd Msg )
@@ -666,39 +696,45 @@ goBack model target =
     case target of
         Source ->
             let
+                previousDir : String
                 previousDir =
                     model.sourceNavigationHistory
                         |> List.head
                         |> Maybe.withDefault ""
-
-                history =
-                    model.sourceNavigationHistory
-                        |> List.drop 1
             in
             if String.isEmpty previousDir then
                 ( model, Cmd.none )
 
             else
-                ( { model | sourceNavigationHistory = history, sourceDirectoryPath = previousDir }
+                let
+                    history : List String
+                    history =
+                        model.sourceNavigationHistory
+                            |> List.drop 1
+                in
+                ( { model | sourceDirectoryPath = previousDir, sourceNavigationHistory = history }
                 , getSourceDirectoryContent previousDir
                 )
 
         Destination ->
             let
+                previousDir : String
                 previousDir =
                     model.destinationNavigationHistory
                         |> List.head
                         |> Maybe.withDefault ""
-
-                history =
-                    model.destinationNavigationHistory
-                        |> List.drop 1
             in
             if String.isEmpty previousDir then
                 ( model, Cmd.none )
 
             else
-                ( { model | destinationNavigationHistory = history, destinationDirectoryPath = previousDir }
+                let
+                    history : List String
+                    history =
+                        model.destinationNavigationHistory
+                            |> List.drop 1
+                in
+                ( { model | destinationDirectoryPath = previousDir, destinationNavigationHistory = history }
                 , Cmd.batch
                     [ getDestinationSubdirectories previousDir
                     , getDestinationDirectoryFiles previousDir
@@ -709,10 +745,6 @@ goBack model target =
 highlight : String -> String -> List (Html Msg)
 highlight =
     Mark.markWith { defaultOptions | minTermLength = 1 }
-
-
-
--- TODO allow renaming destination files
 
 
 inflect : Int -> String
@@ -737,6 +769,7 @@ init _ =
 isFileNotFoundError : Model -> Target -> String -> Bool
 isFileNotFoundError model target errorMsg =
     let
+        dir : String
         dir =
             case target of
                 Source ->
@@ -757,9 +790,9 @@ keyDecoderPreventingDefault target =
             )
 
 
-maxVisiblePathLength : number
-maxVisiblePathLength =
-    45
+maxVisibleCharactersInPaths : Int
+maxVisibleCharactersInPaths =
+    50
 
 
 moveSelectedFiles : Model -> ( Model, Cmd Msg )
@@ -849,22 +882,20 @@ parentDir model path =
     String.slice 0 index path
 
 
-pathElements : Model -> List File -> String -> List File
-pathElements model acc path =
-    if path == "." then
-        []
-
-    else
-        pathElementsRecursive model acc path
-            |> List.reverse
-
-
 pathElementsRecursive : Model -> List File -> String -> List File
 pathElementsRecursive model acc path =
     let
+        endIndex : Int
         endIndex =
             String.length path
 
+        file : File
+        file =
+            defaultDir
+                |> withName leaf
+                |> withParentPath parentPath
+
+        lastPartIndex : Int
         lastPartIndex =
             1
                 + (String.indexes model.pathSeparator path
@@ -876,13 +907,9 @@ pathElementsRecursive model acc path =
         leaf =
             String.slice lastPartIndex endIndex path
 
+        parentPath : String
         parentPath =
             parentDir model path
-
-        file =
-            defaultDir
-                |> withName leaf
-                |> withParentPath parentPath
     in
     if String.length parentPath > 0 then
         file
@@ -1017,9 +1044,6 @@ processMainShortcuts model target event =
             ( Key.F, False ) ->
                 openSelectedFolder model target
 
-            ( Key.Left, _ ) ->
-                goBack model target
-
             ( Key.M, False ) ->
                 moveSelectedFiles model
 
@@ -1034,6 +1058,9 @@ processMainShortcuts model target event =
 
             ( Key.U, False ) ->
                 undo model
+
+            ( Key.Left, _ ) ->
+                goBack model target
 
             ( Key.Delete, False ) ->
                 prepareSelectedFilesForRemoval model
@@ -1157,6 +1184,10 @@ restoreFocus model =
     )
 
 
+
+-- SUBSCRIPTIONS
+
+
 showDirNameEditor : Model -> Target -> ( Model, Cmd Msg )
 showDirNameEditor model target =
     case target of
@@ -1178,10 +1209,6 @@ simpleKeyDecoder target =
             (\key ->
                 UserPressedKey target key
             )
-
-
-
--- SUBSCRIPTIONS
 
 
 subscriptions : Model -> Sub Msg
@@ -1221,6 +1248,10 @@ synchronizeDestinationFilesFilter model =
         model
 
 
+
+-- VIEW
+
+
 type Target
     = Source
     | Destination
@@ -1241,10 +1272,6 @@ toggleSelectionStatus file =
         SelectedForDeletion ->
             -- TODO  Remove from the list of files selected for deletion?
             { file | status = Selected }
-
-
-
--- VIEW
 
 
 undo : Model -> ( Model, Cmd Msg )
@@ -1345,6 +1372,7 @@ update msg model =
 
         BackendReturnedCreatedDirectory dir ->
             let
+                newDirPath : String
                 newDirPath =
                     model.destinationDirectoryPath ++ model.pathSeparator ++ dir.name
             in
@@ -1477,8 +1505,7 @@ update msg model =
                 ]
             )
 
-        BackendReturnedRemovedFile _ _ ->
-            -- TODO remove the unused params
+        BackendReturnedRemovedFile ->
             ( model
               -- TODO reload only the modified content if possible
             , Cmd.batch
@@ -1640,14 +1667,14 @@ update msg model =
                 newDestinationPath : String
                 newDestinationPath =
                     case ( isAbsolute, file.name ) of
+                        ( True, _ ) ->
+                            file.parentPath ++ model.pathSeparator ++ file.name
+
                         ( False, ".." ) ->
                             parentDir model model.destinationDirectoryPath
 
                         ( False, _ ) ->
                             model.destinationDirectoryPath ++ model.pathSeparator ++ file.name
-
-                        ( True, _ ) ->
-                            file.parentPath ++ model.pathSeparator ++ file.name
             in
             ( model |> changeDestinationDirectory newDestinationPath
             , Cmd.batch
@@ -1692,14 +1719,14 @@ update msg model =
                 newSourcePath : String
                 newSourcePath =
                     case ( isAbsolute, file.name ) of
+                        ( True, _ ) ->
+                            file.parentPath ++ model.pathSeparator ++ file.name
+
                         ( False, ".." ) ->
                             parentDir model model.sourceDirectoryPath
 
                         ( False, _ ) ->
                             model.sourceDirectoryPath ++ model.pathSeparator ++ file.name
-
-                        ( True, _ ) ->
-                            file.parentPath ++ model.pathSeparator ++ file.name
             in
             ( model |> changeSourceDirectory newSourcePath
             , getSourceDirectoryContent newSourcePath
@@ -2157,49 +2184,9 @@ viewLeftSide model =
         viewSource model
 
 
-maxVisibleCharactersInPaths : Int
-maxVisibleCharactersInPaths =
-    50
-
-
 viewPath : Model -> Target -> Html Msg
 viewPath model target =
     let
-        path =
-            case target of
-                Source ->
-                    model.sourceDirectoryPath
-
-                Destination ->
-                    model.destinationDirectoryPath
-
-        elements : List File
-        elements =
-            pathElements model [] path
-
-        displayableElements : List File
-        displayableElements =
-            truncateConcatenatedNames maxVisibleCharactersInPaths elements
-
-        displayableElementsCount =
-            List.length displayableElements
-
-        ellipsis : Html Msg
-        ellipsis =
-            if displayableElementsCount < List.length elements then
-                text <| "..." ++ model.pathSeparator
-
-            else
-                text model.pathSeparator
-
-        msgToEmit =
-            case target of
-                Source ->
-                    UserClickedSourceDirectory True
-
-                Destination ->
-                    UserClickedDestinationDirectory True
-
         clickablePath : List (Html Msg)
         clickablePath =
             List.indexedMap
@@ -2219,32 +2206,48 @@ viewPath model target =
                         span [] [ text element.name ]
                 )
                 displayableElements
+
+        displayableElements : List File
+        displayableElements =
+            truncateConcatenatedNames maxVisibleCharactersInPaths elements
+
+        displayableElementsCount : Int
+        displayableElementsCount =
+            List.length displayableElements
+
+        elements : List File
+        elements =
+            pathElements model [] path
+
+        ellipsis : Html Msg
+        ellipsis =
+            if displayableElementsCount < List.length elements then
+                text <| "..." ++ model.pathSeparator
+
+            else
+                text model.pathSeparator
+
+        msgToEmit : File -> Msg
+        msgToEmit =
+            case target of
+                Source ->
+                    UserClickedSourceDirectory True
+
+                Destination ->
+                    UserClickedDestinationDirectory True
+
+        path : String
+        path =
+            case target of
+                Source ->
+                    model.sourceDirectoryPath
+
+                Destination ->
+                    model.destinationDirectoryPath
     in
     span [] <|
         ellipsis
             :: clickablePath
-
-
-truncateConcatenatedNames : Int -> List File -> List File
-truncateConcatenatedNames maxLength elements =
-    let
-        currentLength : List File -> Int
-        currentLength acc =
-            acc
-                |> List.map (.name >> String.length)
-                |> List.sum
-    in
-    elements
-        |> List.reverse
-        |> List.foldl
-            (\element acc ->
-                if currentLength acc + String.length element.name <= maxLength then
-                    element :: acc
-
-                else
-                    acc
-            )
-            []
 
 
 viewReadOnlyFile : Model -> (File -> Msg) -> Bool -> File -> Html Msg

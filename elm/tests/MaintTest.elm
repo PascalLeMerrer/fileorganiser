@@ -90,6 +90,7 @@ suite =
         , test "truncate returns a list of files whose cumulated name length does not exceed given size" <|
             \_ ->
                 let
+                    actual : List File
                     actual =
                         truncateConcatenatedNames 22 allDirs
 
