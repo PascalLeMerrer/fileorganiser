@@ -292,3 +292,13 @@ footer {
 .search-form > input {
   margin-right: 5px;
 }
+
+.link {
+  cursor: pointer;
+
+}
+
+.link:hover {
+  text-decoration: underline;
+
+}

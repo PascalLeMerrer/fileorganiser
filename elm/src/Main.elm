@@ -1,4 +1,4 @@
-port module Main exposing (Command, File, FileStatus(..), FocusedZone, Model, Msg, Operation, defaultDir, defaultModel, filterDestinationDirectories, main, pathElements, withName, withParentPath)
+port module Main exposing (Command, File, FileStatus(..), FocusedZone, Model, Msg, Operation, defaultDir, defaultModel, filterDestinationDirectories, main, pathElements, truncateConcatenatedNames, withName, withParentPath)
 
 import Browser
 import Browser.Dom
@@ -228,12 +228,12 @@ type Msg
     | UserClickedClearDestinationFilesFilter
     | UserClickedCloseError
     | UserClickedDelete
-    | UserClickedDestinationDirectory File
+    | UserClickedDestinationDirectory Bool File -- isAbsolute,  destination
     | UserClickedDestinationDirectoryButton
     | UserClickedDestinationFile File
     | UserClickedReload Target
     | UserClickedReplaceButton
-    | UserClickedSourceDirectory File
+    | UserClickedSourceDirectory Bool File -- isAbsolute, source
     | UserClickedSourceDirectoryButton
     | UserClickedSourceFile File
     | UserClickedSynchronizeDirFilterButton
@@ -893,12 +893,6 @@ pathElementsRecursive model acc path =
             :: acc
 
 
-toString : List File -> String
-toString files =
-    List.map (\f -> "(" ++ f.name ++ ", " ++ f.parentPath ++ ")") files
-        |> String.concat
-
-
 prepareSelectedFilesForRemoval : Model -> ( Model, Cmd Msg )
 prepareSelectedFilesForRemoval model =
     case model.focusedZone of
@@ -1251,20 +1245,6 @@ toggleSelectionStatus file =
 
 
 -- VIEW
-
-
-truncatePath : String -> String
-truncatePath fullPath =
-    let
-        actualLength : Int
-        actualLength =
-            String.length fullPath
-    in
-    if actualLength > maxVisiblePathLength then
-        "..." ++ String.dropLeft (actualLength - maxVisiblePathLength) fullPath
-
-    else
-        fullPath
 
 
 undo : Model -> ( Model, Cmd Msg )
@@ -1655,16 +1635,19 @@ update msg model =
         UserClickedDelete ->
             removeSelectedFiles model
 
-        UserClickedDestinationDirectory file ->
+        UserClickedDestinationDirectory isAbsolute file ->
             let
                 newDestinationPath : String
                 newDestinationPath =
-                    case file.name of
-                        ".." ->
+                    case ( isAbsolute, file.name ) of
+                        ( False, ".." ) ->
                             parentDir model model.destinationDirectoryPath
 
-                        _ ->
+                        ( False, _ ) ->
                             model.destinationDirectoryPath ++ model.pathSeparator ++ file.name
+
+                        ( True, _ ) ->
+                            file.parentPath ++ model.pathSeparator ++ file.name
             in
             ( model |> changeDestinationDirectory newDestinationPath
             , Cmd.batch
@@ -1704,15 +1687,18 @@ update msg model =
             , applyRenaming model renamings
             )
 
-        UserClickedSourceDirectory file ->
+        UserClickedSourceDirectory isAbsolute file ->
             let
                 newSourcePath : String
                 newSourcePath =
-                    case file.name of
-                        ".." ->
-                            file.parentPath
+                    case ( isAbsolute, file.name ) of
+                        ( False, ".." ) ->
+                            parentDir model model.sourceDirectoryPath
 
-                        _ ->
+                        ( False, _ ) ->
+                            model.sourceDirectoryPath ++ model.pathSeparator ++ file.name
+
+                        ( True, _ ) ->
                             file.parentPath ++ model.pathSeparator ++ file.name
             in
             ( model |> changeSourceDirectory newSourcePath
@@ -1989,7 +1975,7 @@ viewDestinationSubdirectories model =
         [ div [ class <| "panel-header" ++ additionalHeaderClass model RightSide ]
             [ h2 []
                 [ text <| "Destination: "
-                , viewPath model model.destinationDirectoryPath
+                , viewPath model Destination
                 ]
             , span []
                 [ button
@@ -2011,7 +1997,7 @@ viewDestinationSubdirectories model =
                 ++ (model.destinationSubdirectories
                         |> List.filter .satisfiesFilter
                         |> List.sortBy (.name >> String.toLower)
-                        |> List.map (viewDirectory model UserClickedDestinationDirectory)
+                        |> List.map (viewDirectory model (UserClickedDestinationDirectory False))
                    )
             )
         ]
@@ -2171,22 +2157,94 @@ viewLeftSide model =
         viewSource model
 
 
-viewPath : Model -> String -> Html Msg
-viewPath model path =
+maxVisibleCharactersInPaths : Int
+maxVisibleCharactersInPaths =
+    50
+
+
+viewPath : Model -> Target -> Html Msg
+viewPath model target =
     let
+        path =
+            case target of
+                Source ->
+                    model.sourceDirectoryPath
+
+                Destination ->
+                    model.destinationDirectoryPath
+
         elements : List File
         elements =
             pathElements model [] path
+
+        displayableElements : List File
+        displayableElements =
+            truncateConcatenatedNames maxVisibleCharactersInPaths elements
+
+        displayableElementsCount =
+            List.length displayableElements
+
+        ellipsis : Html Msg
+        ellipsis =
+            if displayableElementsCount < List.length elements then
+                text <| "..." ++ model.pathSeparator
+
+            else
+                text model.pathSeparator
+
+        msgToEmit =
+            case target of
+                Source ->
+                    UserClickedSourceDirectory True
+
+                Destination ->
+                    UserClickedDestinationDirectory True
+
+        clickablePath : List (Html Msg)
+        clickablePath =
+            List.indexedMap
+                (\index element ->
+                    if index < displayableElementsCount - 1 then
+                        span []
+                            [ span
+                                [ class "link"
+                                , onClick <| msgToEmit element
+                                ]
+                                [ text element.name ]
+                            , span [] [ text model.pathSeparator ]
+                            ]
+
+                    else
+                        -- the name of the current directory is not clickable
+                        span [] [ text element.name ]
+                )
+                displayableElements
     in
-    div [] <|
-        List.map
-            (\element ->
-                span []
-                    [ span [ onClick <| UserClickedSourceDirectory element ] [ text element.name ]
-                    , span [] [ text model.pathSeparator ]
-                    ]
+    span [] <|
+        ellipsis
+            :: clickablePath
+
+
+truncateConcatenatedNames : Int -> List File -> List File
+truncateConcatenatedNames maxLength elements =
+    let
+        currentLength : List File -> Int
+        currentLength acc =
+            acc
+                |> List.map (.name >> String.length)
+                |> List.sum
+    in
+    elements
+        |> List.reverse
+        |> List.foldl
+            (\element acc ->
+                if currentLength acc + String.length element.name <= maxLength then
+                    element :: acc
+
+                else
+                    acc
             )
-            elements
+            []
 
 
 viewReadOnlyFile : Model -> (File -> Msg) -> Bool -> File -> Html Msg
@@ -2327,8 +2385,8 @@ viewSourceSubdirectories model =
     div [ class "panel" ]
         [ div [ class <| "panel-header" ++ additionalHeaderClass model LeftSide ]
             [ h2 []
-                [ text <| "Source "
-                , viewPath model model.sourceDirectoryPath
+                [ text <| "Source: "
+                , viewPath model Source
                 ]
             , span []
                 [ button
@@ -2347,7 +2405,7 @@ viewSourceSubdirectories model =
             [ class "panel-content" ]
             (model.sourceSubDirectories
                 |> List.sortBy (.name >> String.toLower)
-                |> List.map (viewDirectory model UserClickedSourceDirectory)
+                |> List.map (viewDirectory model (UserClickedSourceDirectory False))
             )
         ]
 

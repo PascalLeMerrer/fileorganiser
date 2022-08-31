@@ -1,7 +1,7 @@
 module MaintTest exposing (suite)
 
 import Expect
-import Main exposing (File, FileStatus(..), Model, defaultDir, defaultModel, filterDestinationDirectories, pathElements, withName, withParentPath)
+import Main exposing (File, FileStatus(..), Model, defaultDir, defaultModel, filterDestinationDirectories, pathElements, truncateConcatenatedNames, withName, withParentPath)
 import Test exposing (Test, describe, test)
 import Time exposing (millisToPosix)
 
@@ -87,6 +87,20 @@ suite =
                         []
                 in
                 Expect.equal expected elements
+        , test "truncate returns a list of files whose cumulated name length does not exceed given size" <|
+            \_ ->
+                let
+                    actual =
+                        truncateConcatenatedNames 22 allDirs
+
+                    expected : List File
+                    expected =
+                        [ dir3
+                        , dir4
+                        , dir5
+                        ]
+                in
+                Expect.equal expected actual
         ]
 
 
