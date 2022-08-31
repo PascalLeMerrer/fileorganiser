@@ -10,8 +10,8 @@ windows:
 install:
 	cd elm; npm install --save-dev elm-review
 
-review:
-	cd elm; node_modules/elm-review/bin/elm-review
-
 test:
 	cd elm; elm-test
+
+review:
+	cd elm; node_modules/elm-review/bin/elm-review --fix
