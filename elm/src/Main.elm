@@ -2,6 +2,7 @@ port module Main exposing (Command, File, FileStatus(..), FocusedZone, Model, Ms
 
 import Browser
 import Browser.Dom
+import Browser.Events exposing (onKeyDown, onKeyUp)
 import Filesize
 import Html exposing (Html, button, div, footer, form, h2, input, span, text)
 import Html.Attributes exposing (class, disabled, id, placeholder, tabindex, type_, value)
@@ -166,6 +167,8 @@ type alias Model =
     , focusedZone : FocusedZone
     , history : List (List Command)
     , isCreatingDirectory : Bool
+    , isShiftPressed : Bool
+    , isControlPressed : Bool
     , isUndoing : Bool
     , previousFocusedZone : FocusedZone
     , pathSeparator : String
@@ -219,6 +222,7 @@ type Msg
     | UserModifiedFileName String
     | UserModifiedDirName String
     | UserPressedKey Target KeyboardEvent
+    | UserPressedOrReleasedKey KeyboardEvent
     | UserSubmittedDirName
     | UserSubmittedFilename
 
@@ -259,6 +263,8 @@ defaultModel =
     , focusedZone = LeftSide
     , history = []
     , isCreatingDirectory = False
+    , isShiftPressed = False
+    , isControlPressed = False
     , isUndoing = False
     , previousFocusedZone = LeftSide
     , pathSeparator = unixPathSep
@@ -779,6 +785,15 @@ isFileNotFoundError model target errorMsg =
                     model.destinationDirectoryPath
     in
     errorMsg == "open " ++ dir ++ ": no such file or directory"
+
+
+keyDecoder : Json.Decode.Decoder Msg
+keyDecoder =
+    decodeKeyboardEvent
+        |> Json.Decode.map
+            (\key ->
+                UserPressedOrReleasedKey key
+            )
 
 
 keyDecoderPreventingDefault : Target -> Json.Decode.Decoder ( Msg, Bool )
@@ -1688,13 +1703,9 @@ update msg model =
 
         UserClickedDestinationFile file ->
             let
-                newFile : File
-                newFile =
-                    file |> toggleSelectionStatus
-
                 updatedDestinationFiles : List File
                 updatedDestinationFiles =
-                    List.Extra.updateIf ((==) file) (\_ -> newFile) model.destinationFiles
+                    selectFiles model.destinationFiles file
             in
             ( { model | destinationFiles = updatedDestinationFiles }
             , Cmd.none
@@ -1737,13 +1748,9 @@ update msg model =
 
         UserClickedSourceFile file ->
             let
-                newFile : File
-                newFile =
-                    file |> toggleSelectionStatus
-
                 updatedSourceFiles : List File
                 updatedSourceFiles =
-                    List.Extra.updateIf ((==) file) (\_ -> newFile) model.sourceFiles
+                    selectFiles model.sourceFiles file
             in
             ( { model
                 | focusedZone = LeftSide
@@ -1830,10 +1837,36 @@ update msg model =
                 _ ->
                     ( model, Cmd.none )
 
+        UserPressedOrReleasedKey keyboardEvent ->
+            ( { model
+                | isShiftPressed = keyboardEvent.shiftKey
+                , isControlPressed = keyboardEvent.ctrlKey || keyboardEvent.metaKey
+              }
+            , Cmd.none
+            )
+
+
+selectFiles : List File -> File -> List File
+selectFiles files clikedFile =
+    files
+        |> List.map
+            (\f ->
+                if f == clikedFile then
+                    toggleSelectionStatus f
+
+                else
+                    f |> withStatus Unselected
+            )
+
 
 view : Model -> Html Msg
 view model =
-    div [ class "app", id "app" ]
+    div
+        [ class "app"
+        , id "app"
+        , Events.on "keydown" keyDecoder
+        , Events.on "keyup" keyDecoder
+        ]
         [ viewLeftSide model
         , viewRightSide model
         , viewFooter model
@@ -2078,6 +2111,23 @@ viewFile model onClickMsg canBeSearchedAndReplaced file =
         viewReadOnlyFile model onClickMsg canBeSearchedAndReplaced file
 
 
+viewPressedKeys : Model -> Html Msg
+viewPressedKeys model =
+    text
+        (if model.isControlPressed then
+            " CTRL "
+
+         else
+            ""
+                ++ (if model.isShiftPressed then
+                        " SHIFT "
+
+                    else
+                        ""
+                   )
+        )
+
+
 viewFocusedZone : Model -> Html Msg
 viewFocusedZone model =
     text <|
@@ -2142,7 +2192,9 @@ viewFooter model =
                     ]
 
             Nothing ->
-                viewFocusedZone model
+                viewPressedKeys model
+
+        --        viewFocusedZone model
         , case model.filesToDelete of
             [] ->
                 text ""
@@ -2416,3 +2468,8 @@ viewSourceSubdirectories model =
 windowsPathSep : String
 windowsPathSep =
     "\\"
+
+
+withStatus : FileStatus -> File -> File
+withStatus fileStatus file =
+    { file | status = fileStatus }
