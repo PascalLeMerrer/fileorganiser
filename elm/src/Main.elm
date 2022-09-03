@@ -1,4 +1,4 @@
-port module Main exposing (Command, File, FileStatus(..), FocusedZone, Model, Msg, Operation, defaultDir, defaultModel, filterDestinationDirectories, main, pathElements, truncateConcatenatedNames, withName, withParentPath)
+port module Main exposing (Command, File, FileStatus(..), FocusedZone, Model, Msg, Operation, defaultDir, defaultModel, filterDestinationDirectories, main, pathElements, select, truncateConcatenatedNames, withName, withParentPath, withStatus)
 
 import Browser
 import Browser.Dom
@@ -1705,7 +1705,7 @@ update msg model =
             let
                 updatedDestinationFiles : List File
                 updatedDestinationFiles =
-                    selectFiles model.destinationFiles file
+                    select model model.destinationFiles file
             in
             ( { model | destinationFiles = updatedDestinationFiles }
             , Cmd.none
@@ -1750,7 +1750,7 @@ update msg model =
             let
                 updatedSourceFiles : List File
                 updatedSourceFiles =
-                    selectFiles model.sourceFiles file
+                    select model model.sourceFiles file
             in
             ( { model
                 | focusedZone = LeftSide
@@ -1846,13 +1846,16 @@ update msg model =
             )
 
 
-selectFiles : List File -> File -> List File
-selectFiles files clikedFile =
+select : Model -> List File -> File -> List File
+select model files clikedFile =
     files
         |> List.map
             (\f ->
                 if f == clikedFile then
-                    toggleSelectionStatus f
+                    toggleSelectionStatus f |> Debug.log "toggleSelectionStatus"
+
+                else if model.isControlPressed then
+                    f |> Debug.log "unchanged"
 
                 else
                     f |> withStatus Unselected

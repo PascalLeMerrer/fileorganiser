@@ -1,8 +1,8 @@
 module MaintTest exposing (suite)
 
 import Expect
-import Main exposing (File, FileStatus(..), Model, defaultDir, defaultModel, filterDestinationDirectories, pathElements, truncateConcatenatedNames, withName, withParentPath)
-import Test exposing (Test, describe, test)
+import Main exposing (File, FileStatus(..), Model, defaultDir, defaultModel, filterDestinationDirectories, pathElements, select, truncateConcatenatedNames, withName, withParentPath, withStatus)
+import Test exposing (Test, describe, only, test)
 import Time exposing (millisToPosix)
 
 
@@ -97,6 +97,101 @@ suite =
                     expected : List File
                     expected =
                         [ dir3
+                        , dir4
+                        , dir5
+                        ]
+                in
+                Expect.equal expected actual
+        , test "select selects only the clicked file when neither CTRL or SHIFT are pressed" <|
+            \_ ->
+                let
+                    actual : List File
+                    actual =
+                        select model allDirs dir3
+
+                    expected : List File
+                    expected =
+                        [ dir1
+                        , dir2
+                        , dir3 |> withStatus Selected
+                        , dir4
+                        , dir5
+                        ]
+                in
+                Expect.equal expected actual
+        , test "select unselects the clicked file when neither CTRL or SHIFT are pressed" <|
+            \_ ->
+                let
+                    clickedFile =
+                        dir3 |> withStatus Selected
+
+                    actual : List File
+                    actual =
+                        select model
+                            [ dir1
+                            , dir2
+                            , clickedFile
+                            , dir4
+                            , dir5
+                            ]
+                            dir3
+
+                    expected : List File
+                    expected =
+                        allDirs
+                in
+                Expect.equal expected actual
+        , test "select adds the clicked file to the current selection if it is unselected" <|
+            \_ ->
+                let
+                    clickedFile =
+                        dir3 |> withStatus Selected
+
+                    actual : List File
+                    actual =
+                        select
+                            { model | isControlPressed = True }
+                            [ dir1
+                            , dir2
+                            , clickedFile
+                            , dir4
+                            , dir5
+                            ]
+                            dir4
+
+                    expected : List File
+                    expected =
+                        [ dir1
+                        , dir2
+                        , dir3 |> withStatus Selected
+                        , dir4 |> withStatus Selected
+                        , dir5
+                        ]
+                in
+                Expect.equal expected actual
+        , test "select removes the clicked file from the current selection if it is selected" <|
+            \_ ->
+                let
+                    clickedFile =
+                        dir4 |> withStatus Selected
+
+                    actual : List File
+                    actual =
+                        select
+                            { model | isControlPressed = True }
+                            [ dir1
+                            , dir2
+                            , dir3 |> withStatus Selected
+                            , clickedFile
+                            , dir5
+                            ]
+                            clickedFile
+
+                    expected : List File
+                    expected =
+                        [ dir1
+                        , dir2
+                        , dir3 |> withStatus Selected
                         , dir4
                         , dir5
                         ]
