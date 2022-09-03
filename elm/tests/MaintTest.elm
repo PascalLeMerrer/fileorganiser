@@ -2,7 +2,7 @@ module MaintTest exposing (suite)
 
 import Expect
 import Main exposing (File, FileStatus(..), Model, defaultDir, defaultModel, filterDestinationDirectories, pathElements, select, truncateConcatenatedNames, withName, withParentPath, withStatus)
-import Test exposing (Test, describe, only, test)
+import Test exposing (Test, describe, test)
 import Time exposing (millisToPosix)
 
 
@@ -122,9 +122,6 @@ suite =
         , test "select unselects the clicked file when neither CTRL or SHIFT are pressed" <|
             \_ ->
                 let
-                    clickedFile =
-                        dir3 |> withStatus Selected
-
                     actual : List File
                     actual =
                         select model
@@ -136,6 +133,10 @@ suite =
                             ]
                             dir3
 
+                    clickedFile : File
+                    clickedFile =
+                        dir3 |> withStatus Selected
+
                     expected : List File
                     expected =
                         allDirs
@@ -144,9 +145,6 @@ suite =
         , test "select adds the clicked file to the current selection if it is unselected and CTRL is pressed" <|
             \_ ->
                 let
-                    clickedFile =
-                        dir3 |> withStatus Selected
-
                     actual : List File
                     actual =
                         select
@@ -158,6 +156,10 @@ suite =
                             , dir5
                             ]
                             dir4
+
+                    clickedFile : File
+                    clickedFile =
+                        dir3 |> withStatus Selected
 
                     expected : List File
                     expected =
@@ -172,9 +174,6 @@ suite =
         , test "select removes the clicked file from the current selection if it is selected and CTRL is pressed" <|
             \_ ->
                 let
-                    clickedFile =
-                        dir4 |> withStatus Selected
-
                     actual : List File
                     actual =
                         select
@@ -186,6 +185,10 @@ suite =
                             , dir5
                             ]
                             clickedFile
+
+                    clickedFile : File
+                    clickedFile =
+                        dir4 |> withStatus Selected
 
                     expected : List File
                     expected =
@@ -299,29 +302,34 @@ dir5 =
     }
 
 
-model : Model
-model =
-    { defaultModel | destinationSubdirectories = [] }
-
-
+filteredDir1 : File
 filteredDir1 =
     dir1 |> withSatisfiedFilter
 
 
+filteredDir2 : File
 filteredDir2 =
     dir2 |> withSatisfiedFilter
 
 
+filteredDir3 : File
 filteredDir3 =
     dir3 |> withSatisfiedFilter
 
 
+filteredDir4 : File
 filteredDir4 =
     dir4 |> withSatisfiedFilter
 
 
+filteredDir5 : File
 filteredDir5 =
     dir5 |> withSatisfiedFilter
+
+
+model : Model
+model =
+    { defaultModel | destinationSubdirectories = [] }
 
 
 withSatisfiedFilter : File -> File

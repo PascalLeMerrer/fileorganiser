@@ -325,6 +325,74 @@ pathElements model acc path =
 -- MODEL
 
 
+select : Model -> List File -> File -> List File
+select model files clikedFile =
+    if model.isShiftPressed then
+        let
+            indexOfClickedElement : Int
+            indexOfClickedElement =
+                List.Extra.elemIndex clikedFile files
+                    |> Maybe.withDefault 0
+
+            indexOfFirstSelectedElement : Int
+            indexOfFirstSelectedElement =
+                selectedItemsIndices
+                    |> List.minimum
+                    |> Maybe.withDefault 0
+
+            indexOfLastSelectedElement : Int
+            indexOfLastSelectedElement =
+                selectedItemsIndices
+                    |> List.maximum
+                    |> Maybe.withDefault 0
+
+            selectedItemsIndices : List Int
+            selectedItemsIndices =
+                List.Extra.findIndices (\f -> f.status == Selected) files
+        in
+        files
+            |> List.Extra.updateIfIndex
+                (\index ->
+                    let
+                        isInRangeBetweenClickedFileAndLastSelectedFile : Bool
+                        isInRangeBetweenClickedFileAndLastSelectedFile =
+                            indexOfClickedElement
+                                < indexOfLastSelectedElement
+                                && index
+                                >= indexOfClickedElement
+                                && index
+                                <= indexOfLastSelectedElement
+
+                        isInRangeBetweenFirstSelectedFileAndClickedFile : Bool
+                        isInRangeBetweenFirstSelectedFileAndClickedFile =
+                            indexOfClickedElement > indexOfFirstSelectedElement && index >= indexOfFirstSelectedElement && index <= indexOfClickedElement
+                    in
+                    isInRangeBetweenFirstSelectedFileAndClickedFile
+                        || (not isInRangeBetweenFirstSelectedFileAndClickedFile && isInRangeBetweenClickedFileAndLastSelectedFile)
+                )
+                (\f ->
+                    if f.satisfiesFilter then
+                        { f | status = Selected }
+
+                    else
+                        f
+                )
+
+    else
+        files
+            |> List.map
+                (\f ->
+                    if f == clikedFile then
+                        toggleSelectionStatus f
+
+                    else if model.isControlPressed then
+                        f
+
+                    else
+                        f |> withStatus Unselected
+                )
+
+
 truncateConcatenatedNames : Int -> List File -> List File
 truncateConcatenatedNames maxLength elements =
     let
@@ -352,13 +420,18 @@ withName name file =
     { file | name = name }
 
 
+
+-- UPDATE
+
+
 withParentPath : String -> File -> File
 withParentPath path file =
     { file | parentPath = path }
 
 
-
--- UPDATE
+withStatus : FileStatus -> File -> File
+withStatus fileStatus file =
+    { file | status = fileStatus }
 
 
 additionalHeaderClass : Model -> FocusedZone -> String
@@ -636,6 +709,10 @@ filterByParentPath filters file =
         List.all (\word -> String.contains (String.toLower word) lowerCaseParentPath) filters
 
 
+
+{- navigate t o the previous dir in history -}
+
+
 filterDestinationFiles : Model -> Model
 filterDestinationFiles model =
     let
@@ -662,7 +739,7 @@ filterSelectedFiles files =
 
 
 
-{- navigate t o the previous dir in history -}
+-- TODO allow renaming destination files
 
 
 filterSourceFiles : Model -> Model
@@ -690,10 +767,6 @@ filterSourceFiles model =
 focusOn : String -> msg -> Cmd msg
 focusOn elementId msg =
     Browser.Dom.focus elementId |> Task.attempt (\_ -> msg)
-
-
-
--- TODO allow renaming destination files
 
 
 goBack : Model -> Target -> ( Model, Cmd Msg )
@@ -1158,6 +1231,10 @@ renameSelectedSourceFile model =
             ( model, Cmd.none )
 
 
+
+-- SUBSCRIPTIONS
+
+
 type alias Renaming =
     { file : File
     , originalPath : String
@@ -1198,10 +1275,6 @@ restoreFocus model =
     )
 
 
-
--- SUBSCRIPTIONS
-
-
 showDirNameEditor : Model -> Target -> ( Model, Cmd Msg )
 showDirNameEditor model target =
     case target of
@@ -1223,6 +1296,15 @@ simpleKeyDecoder target =
             (\key ->
                 UserPressedKey target key
             )
+
+
+sortByName : List { a | name : String } -> List { a | name : String }
+sortByName =
+    List.sortBy (.name >> String.toLower)
+
+
+
+-- VIEW
 
 
 subscriptions : Model -> Sub Msg
@@ -1260,10 +1342,6 @@ synchronizeDestinationFilesFilter model =
 
     else
         model
-
-
-
--- VIEW
 
 
 type Target
@@ -1795,6 +1873,14 @@ update msg model =
             else
                 processKeyboardShortcut model target event
 
+        UserPressedOrReleasedKey keyboardEvent ->
+            ( { model
+                | isShiftPressed = keyboardEvent.shiftKey
+                , isControlPressed = keyboardEvent.ctrlKey || keyboardEvent.metaKey
+              }
+            , Cmd.none
+            )
+
         UserSubmittedDirName ->
             if model.isCreatingDirectory && model.editedDirName /= "" then
                 createNewDirectory model
@@ -1835,86 +1921,6 @@ update msg model =
 
                 _ ->
                     ( model, Cmd.none )
-
-        UserPressedOrReleasedKey keyboardEvent ->
-            ( { model
-                | isShiftPressed = keyboardEvent.shiftKey
-                , isControlPressed = keyboardEvent.ctrlKey || keyboardEvent.metaKey
-              }
-            , Cmd.none
-            )
-
-
-select : Model -> List File -> File -> List File
-select model files clikedFile =
-    if model.isShiftPressed then
-        let
-            indexOfClickedElement =
-                List.Extra.elemIndex clikedFile files
-                    |> Maybe.withDefault 0
-
-            --|> Debug.log "indexOfClickedElement"
-            selectedItemsIndices =
-                List.Extra.findIndices (\f -> f.status == Selected) files
-
-            --|> Debug.log "selectedItemsIndices"
-            indexOfLastSelectedElement =
-                selectedItemsIndices
-                    |> List.maximum
-                    |> Maybe.withDefault 0
-
-            --|> Debug.log "indexOfLastSelectedElement"
-            indexOfFirstSelectedElement =
-                selectedItemsIndices
-                    |> List.minimum
-                    |> Maybe.withDefault 0
-
-            --|> Debug.log "indexOfFirstSelectedElement"
-        in
-        files
-            |> List.Extra.updateIfIndex
-                (\index ->
-                    let
-                        isInRangeBetweenFirstSelectedFileAndClickedFile =
-                            indexOfClickedElement > indexOfFirstSelectedElement && index >= indexOfFirstSelectedElement && index <= indexOfClickedElement
-
-                        --|> Debug.log "isInRangeBetweenFirstSelectedFileAndClickedFile"
-                        isInRangeBetweenClickedFileAndLastSelectedFile =
-                            indexOfClickedElement
-                                < indexOfLastSelectedElement
-                                && index
-                                >= indexOfClickedElement
-                                && index
-                                <= indexOfLastSelectedElement
-
-                        --|> Debug.log "isInRangeBetweenClickedFileAndLastSelectedFile"
-                    in
-                    (isInRangeBetweenFirstSelectedFileAndClickedFile
-                        || (not isInRangeBetweenFirstSelectedFileAndClickedFile && isInRangeBetweenClickedFileAndLastSelectedFile)
-                    )
-                        |> Debug.log "result"
-                )
-                (\f ->
-                    if f.satisfiesFilter then
-                        { f | status = Selected }
-
-                    else
-                        f
-                )
-
-    else
-        files
-            |> List.map
-                (\f ->
-                    if f == clikedFile then
-                        toggleSelectionStatus f
-
-                    else if model.isControlPressed then
-                        f
-
-                    else
-                        f |> withStatus Unselected
-                )
 
 
 view : Model -> Html Msg
@@ -2167,52 +2173,6 @@ viewFile model onClickMsg canBeSearchedAndReplaced file =
         viewReadOnlyFile model onClickMsg canBeSearchedAndReplaced file
 
 
-viewPressedKeys : Model -> Html Msg
-viewPressedKeys model =
-    text
-        (if model.isControlPressed then
-            " CTRL "
-
-         else
-            ""
-                ++ (if model.isShiftPressed then
-                        " SHIFT "
-
-                    else
-                        ""
-                   )
-        )
-
-
-viewFocusedZone : Model -> Html Msg
-viewFocusedZone model =
-    text <|
-        case model.focusedZone of
-            Confirmation ->
-                "Confirmation _ "
-
-            ErrorMessage ->
-                "ErrorMessage _ "
-
-            Filtering ->
-                "Filtering _ "
-
-            LeftSide ->
-                "LeftSide _ "
-
-            FileNameEditor ->
-                "NameEditor _ "
-
-            DirNameEditor ->
-                "DirNameEditor _ "
-
-            RightSide ->
-                "RightSide _ "
-
-            SourceSearchReplace ->
-                "SourceSearchReplace _ "
-
-
 viewFooter : Model -> Html Msg
 viewFooter model =
     let
@@ -2356,6 +2316,23 @@ viewPath model target =
     span [] <|
         ellipsis
             :: clickablePath
+
+
+viewPressedKeys : Model -> Html Msg
+viewPressedKeys model =
+    text
+        (if model.isControlPressed then
+            " CTRL "
+
+         else
+            ""
+                ++ (if model.isShiftPressed then
+                        " SHIFT "
+
+                    else
+                        ""
+                   )
+        )
 
 
 viewReadOnlyFile : Model -> (File -> Msg) -> Bool -> File -> Html Msg
@@ -2522,12 +2499,3 @@ viewSourceSubdirectories model =
 windowsPathSep : String
 windowsPathSep =
     "\\"
-
-
-withStatus : FileStatus -> File -> File
-withStatus fileStatus file =
-    { file | status = fileStatus }
-
-
-sortByName =
-    List.sortBy (.name >> String.toLower)
