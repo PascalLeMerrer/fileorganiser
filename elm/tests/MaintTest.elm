@@ -141,7 +141,7 @@ suite =
                         allDirs
                 in
                 Expect.equal expected actual
-        , test "select adds the clicked file to the current selection if it is unselected" <|
+        , test "select adds the clicked file to the current selection if it is unselected and CTRL is pressed" <|
             \_ ->
                 let
                     clickedFile =
@@ -169,7 +169,7 @@ suite =
                         ]
                 in
                 Expect.equal expected actual
-        , test "select removes the clicked file from the current selection if it is selected" <|
+        , test "select removes the clicked file from the current selection if it is selected and CTRL is pressed" <|
             \_ ->
                 let
                     clickedFile =
@@ -194,6 +194,56 @@ suite =
                         , dir3 |> withStatus Selected
                         , dir4
                         , dir5
+                        ]
+                in
+                Expect.equal expected actual
+        , test "select selects the file range from the first selected to the clicked file when it is after and SHIFT is pressed" <|
+            \_ ->
+                let
+                    actual : List File
+                    actual =
+                        select
+                            { model | isShiftPressed = True }
+                            [ filteredDir1
+                            , filteredDir2 |> withStatus Selected
+                            , filteredDir3
+                            , filteredDir4
+                            , filteredDir5
+                            ]
+                            filteredDir4
+
+                    expected : List File
+                    expected =
+                        [ filteredDir1
+                        , filteredDir2 |> withStatus Selected
+                        , filteredDir3 |> withStatus Selected
+                        , filteredDir4 |> withStatus Selected
+                        , filteredDir5
+                        ]
+                in
+                Expect.equal expected actual
+        , test "select selects the file range from the clicked file to the last selected when it is before and SHIFT is pressed" <|
+            \_ ->
+                let
+                    actual : List File
+                    actual =
+                        select
+                            { model | isShiftPressed = True }
+                            [ filteredDir1
+                            , filteredDir2
+                            , filteredDir3
+                            , filteredDir4 |> withStatus Selected
+                            , filteredDir5
+                            ]
+                            filteredDir2
+
+                    expected : List File
+                    expected =
+                        [ filteredDir1
+                        , filteredDir2 |> withStatus Selected
+                        , filteredDir3 |> withStatus Selected
+                        , filteredDir4 |> withStatus Selected
+                        , filteredDir5
                         ]
                 in
                 Expect.equal expected actual
@@ -252,3 +302,28 @@ dir5 =
 model : Model
 model =
     { defaultModel | destinationSubdirectories = [] }
+
+
+filteredDir1 =
+    dir1 |> withSatisfiedFilter
+
+
+filteredDir2 =
+    dir2 |> withSatisfiedFilter
+
+
+filteredDir3 =
+    dir3 |> withSatisfiedFilter
+
+
+filteredDir4 =
+    dir4 |> withSatisfiedFilter
+
+
+filteredDir5 =
+    dir5 |> withSatisfiedFilter
+
+
+withSatisfiedFilter : File -> File
+withSatisfiedFilter file =
+    { file | satisfiesFilter = True }

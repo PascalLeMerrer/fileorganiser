@@ -2,7 +2,6 @@ port module Main exposing (Command, File, FileStatus(..), FocusedZone, Model, Ms
 
 import Browser
 import Browser.Dom
-import Browser.Events exposing (onKeyDown, onKeyUp)
 import Filesize
 import Html exposing (Html, button, div, footer, form, h2, input, span, text)
 import Html.Attributes exposing (class, disabled, id, placeholder, tabindex, type_, value)
@@ -1427,7 +1426,7 @@ update msg model =
             )
 
         BackendReturnedDestinationDirectories files ->
-            ( { model | destinationSubdirectories = files }
+            ( { model | destinationSubdirectories = files |> sortByName }
                 |> filterDestinationDirectories
             , Cmd.none
             )
@@ -1447,7 +1446,7 @@ update msg model =
 
         BackendReturnedDestinationFiles fileList ->
             ( { model
-                | destinationFiles = fileList
+                | destinationFiles = fileList |> sortByName
               }
                 |> filterDestinationFiles
             , Cmd.none
@@ -1583,8 +1582,8 @@ update msg model =
                     List.partition .isDir directoryContent
             in
             ( { model
-                | sourceFiles = fileList
-                , sourceSubDirectories = dirList
+                | sourceFiles = fileList |> sortByName
+                , sourceSubDirectories = dirList |> sortByName
               }
                 |> filterSourceFiles
             , Cmd.none
@@ -1848,18 +1847,74 @@ update msg model =
 
 select : Model -> List File -> File -> List File
 select model files clikedFile =
-    files
-        |> List.map
-            (\f ->
-                if f == clikedFile then
-                    toggleSelectionStatus f |> Debug.log "toggleSelectionStatus"
+    if model.isShiftPressed then
+        let
+            indexOfClickedElement =
+                List.Extra.elemIndex clikedFile files
+                    |> Maybe.withDefault 0
 
-                else if model.isControlPressed then
-                    f |> Debug.log "unchanged"
+            --|> Debug.log "indexOfClickedElement"
+            selectedItemsIndices =
+                List.Extra.findIndices (\f -> f.status == Selected) files
 
-                else
-                    f |> withStatus Unselected
-            )
+            --|> Debug.log "selectedItemsIndices"
+            indexOfLastSelectedElement =
+                selectedItemsIndices
+                    |> List.maximum
+                    |> Maybe.withDefault 0
+
+            --|> Debug.log "indexOfLastSelectedElement"
+            indexOfFirstSelectedElement =
+                selectedItemsIndices
+                    |> List.minimum
+                    |> Maybe.withDefault 0
+
+            --|> Debug.log "indexOfFirstSelectedElement"
+        in
+        files
+            |> List.Extra.updateIfIndex
+                (\index ->
+                    let
+                        isInRangeBetweenFirstSelectedFileAndClickedFile =
+                            indexOfClickedElement > indexOfFirstSelectedElement && index >= indexOfFirstSelectedElement && index <= indexOfClickedElement
+
+                        --|> Debug.log "isInRangeBetweenFirstSelectedFileAndClickedFile"
+                        isInRangeBetweenClickedFileAndLastSelectedFile =
+                            indexOfClickedElement
+                                < indexOfLastSelectedElement
+                                && index
+                                >= indexOfClickedElement
+                                && index
+                                <= indexOfLastSelectedElement
+
+                        --|> Debug.log "isInRangeBetweenClickedFileAndLastSelectedFile"
+                    in
+                    (isInRangeBetweenFirstSelectedFileAndClickedFile
+                        || (not isInRangeBetweenFirstSelectedFileAndClickedFile && isInRangeBetweenClickedFileAndLastSelectedFile)
+                    )
+                        |> Debug.log "result"
+                )
+                (\f ->
+                    if f.satisfiesFilter then
+                        { f | status = Selected }
+
+                    else
+                        f
+                )
+
+    else
+        files
+            |> List.map
+                (\f ->
+                    if f == clikedFile then
+                        toggleSelectionStatus f
+
+                    else if model.isControlPressed then
+                        f
+
+                    else
+                        f |> withStatus Unselected
+                )
 
 
 view : Model -> Html Msg
@@ -1985,7 +2040,6 @@ viewDestinationFiles model =
             [ class "panel-content" ]
             (model.destinationFiles
                 |> List.filter .satisfiesFilter
-                |> List.sortBy (.name >> String.toLower)
                 |> List.map (viewFile model UserClickedDestinationFile False)
             )
         ]
@@ -2059,7 +2113,6 @@ viewDestinationSubdirectories model =
             (newDirEditor
                 ++ (model.destinationSubdirectories
                         |> List.filter .satisfiesFilter
-                        |> List.sortBy (.name >> String.toLower)
                         |> List.map (viewDirectory model (UserClickedDestinationDirectory False))
                    )
             )
@@ -2432,7 +2485,6 @@ viewSourceFiles model =
             [ class "panel-content" ]
             (model.sourceFiles
                 |> List.filter .satisfiesFilter
-                |> List.sortBy (.name >> String.toLower)
                 |> List.map (viewFile model UserClickedSourceFile True)
             )
         ]
@@ -2462,7 +2514,6 @@ viewSourceSubdirectories model =
         , div
             [ class "panel-content" ]
             (model.sourceSubDirectories
-                |> List.sortBy (.name >> String.toLower)
                 |> List.map (viewDirectory model (UserClickedSourceDirectory False))
             )
         ]
@@ -2476,3 +2527,7 @@ windowsPathSep =
 withStatus : FileStatus -> File -> File
 withStatus fileStatus file =
     { file | status = fileStatus }
+
+
+sortByName =
+    List.sortBy (.name >> String.toLower)
