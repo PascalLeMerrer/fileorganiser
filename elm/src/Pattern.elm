@@ -1,4 +1,4 @@
-module Pattern exposing (..)
+module Pattern exposing (Pattern, Token(..), fromString, toRegexp)
 
 import Regex exposing (Regex)
 
@@ -10,16 +10,6 @@ type alias Pattern =
 type Token
     = RawString String
     | Joker
-
-
-escapeSpecialChars : String -> String
-escapeSpecialChars string =
-    string
-        |> String.replace "." "\\."
-        |> String.replace "[" "\\["
-        |> String.replace "]" "\\]"
-        |> String.replace "(" "\\("
-        |> String.replace ")" "\\)"
 
 
 fromString : String -> List Token
@@ -46,3 +36,13 @@ toRegexp pattern =
             )
         |> String.concat
         |> Regex.fromString
+
+
+escapeSpecialChars : String -> String
+escapeSpecialChars string =
+    string
+        |> String.replace "." "\\."
+        |> String.replace "[" "\\["
+        |> String.replace "]" "\\]"
+        |> String.replace "(" "\\("
+        |> String.replace ")" "\\)"

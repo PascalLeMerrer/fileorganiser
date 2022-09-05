@@ -1,4 +1,4 @@
-module SearchReplaceTest exposing (..)
+module SearchReplaceTest exposing (suite)
 
 import Expect
 import Pattern exposing (Token(..), fromString)

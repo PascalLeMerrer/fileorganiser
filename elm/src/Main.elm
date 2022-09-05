@@ -824,7 +824,7 @@ goBack model target =
 
 highlight : String -> String -> List (Html Msg)
 highlight =
-    Mark.markWith { defaultOptions | minTermLength = 1, whitespace = multiWord }
+    Mark.markWith { defaultOptions | whitespace = multiWord, minTermLength = 1 }
 
 
 inflect : Int -> String
@@ -879,6 +879,24 @@ keyDecoderPreventingDefault target =
             )
 
 
+matches : Model -> String -> String
+matches model string =
+    let
+        maybeRegex : Maybe Regex.Regex
+        maybeRegex =
+            Pattern.fromString model.sourceSearch
+                |> Pattern.toRegexp
+    in
+    case maybeRegex of
+        Just regex ->
+            Regex.find regex string
+                |> List.map .match
+                |> String.join " "
+
+        Nothing ->
+            ""
+
+
 maxVisibleCharactersInPaths : Int
 maxVisibleCharactersInPaths =
     50
@@ -911,6 +929,7 @@ moveSelectedFiles model =
 nameReplacement : Model -> File -> Maybe Renaming
 nameReplacement model file =
     let
+        newName : String
         newName =
             replace model file.name
     in
@@ -1209,6 +1228,10 @@ removeSelectedFiles model =
     )
 
 
+
+-- SUBSCRIPTIONS
+
+
 renameSelectedSourceFile : Model -> ( Model, Cmd Msg )
 renameSelectedSourceFile model =
     let
@@ -1237,14 +1260,26 @@ renameSelectedSourceFile model =
             ( model, Cmd.none )
 
 
-
--- SUBSCRIPTIONS
-
-
 type alias Renaming =
     { file : File
     , originalPath : String
     }
+
+
+replace : Model -> String -> String
+replace model originalString =
+    let
+        maybeRegex : Maybe Regex.Regex
+        maybeRegex =
+            Pattern.fromString model.sourceSearch
+                |> Pattern.toRegexp
+    in
+    case maybeRegex of
+        Just regex ->
+            Regex.replace regex (\_ -> model.sourceReplace) originalString
+
+        Nothing ->
+            originalString
 
 
 restoreFocus : Model -> ( Model, Cmd Msg )
@@ -1295,6 +1330,10 @@ showDirNameEditor model target =
             )
 
 
+
+-- VIEW
+
+
 simpleKeyDecoder : Target -> Json.Decode.Decoder Msg
 simpleKeyDecoder target =
     decodeKeyboardEvent
@@ -1307,10 +1346,6 @@ simpleKeyDecoder target =
 sortByName : List { a | name : String } -> List { a | name : String }
 sortByName =
     List.sortBy (.name >> String.toLower)
-
-
-
--- VIEW
 
 
 subscriptions : Model -> Sub Msg
@@ -1929,38 +1964,6 @@ update msg model =
                     ( model, Cmd.none )
 
 
-matches : Model -> String -> String
-matches model string =
-    let
-        maybeRegex =
-            Pattern.fromString model.sourceSearch
-                |> Pattern.toRegexp
-    in
-    case maybeRegex of
-        Just regex ->
-            Regex.find regex string
-                |> List.map .match
-                |> String.join " "
-
-        Nothing ->
-            ""
-
-
-replace : Model -> String -> String
-replace model originalString =
-    let
-        maybeRegex =
-            Pattern.fromString model.sourceSearch
-                |> Pattern.toRegexp
-    in
-    case maybeRegex of
-        Just regex ->
-            Regex.replace regex (\_ -> model.sourceReplace) originalString
-
-        Nothing ->
-            originalString
-
-
 view : Model -> Html Msg
 view model =
     div
@@ -2398,7 +2401,7 @@ viewReadOnlyFile model onClickMsg canBeSearchedAndReplaced file =
                     ( "", _ ) ->
                         [ text file.name ]
 
-                    ( searchedString, "" ) ->
+                    ( _, "" ) ->
                         highlight (matches model file.name) file.name
 
                     ( _, replacementString ) ->
