@@ -13,7 +13,9 @@ import Json.Encode
 import Keyboard.Event exposing (KeyboardEvent, decodeKeyboardEvent)
 import Keyboard.Key as Key
 import List.Extra
-import String.Mark as Mark exposing (defaultOptions)
+import Pattern
+import Regex
+import String.Mark as Mark exposing (defaultOptions, multiWord)
 import Task
 import Time exposing (Month(..), Posix, millisToPosix)
 
@@ -822,7 +824,7 @@ goBack model target =
 
 highlight : String -> String -> List (Html Msg)
 highlight =
-    Mark.markWith { defaultOptions | minTermLength = 1 }
+    Mark.markWith { defaultOptions | minTermLength = 1, whitespace = multiWord }
 
 
 inflect : Int -> String
@@ -906,11 +908,15 @@ moveSelectedFiles model =
     )
 
 
-nameReplacement : String -> String -> File -> Maybe Renaming
-nameReplacement before after file =
-    if file.satisfiesFilter && String.contains before file.name then
+nameReplacement : Model -> File -> Maybe Renaming
+nameReplacement model file =
+    let
+        newName =
+            replace model file.name
+    in
+    if file.satisfiesFilter && (newName /= file.name) then
         Just
-            { file = { file | name = String.replace before after file.name }
+            { file = { file | name = newName }
 
             -- TODO prepend with the source dir?
             , originalPath = file.name
@@ -1796,7 +1802,7 @@ update msg model =
                 renamings : List Renaming
                 renamings =
                     model.sourceFiles
-                        |> List.filterMap (nameReplacement model.sourceSearch model.sourceReplace)
+                        |> List.filterMap (nameReplacement model)
             in
             ( { model | sourceReplace = "" }
             , applyRenaming model renamings
@@ -1921,6 +1927,38 @@ update msg model =
 
                 _ ->
                     ( model, Cmd.none )
+
+
+matches : Model -> String -> String
+matches model string =
+    let
+        maybeRegex =
+            Pattern.fromString model.sourceSearch
+                |> Pattern.toRegexp
+    in
+    case maybeRegex of
+        Just regex ->
+            Regex.find regex string
+                |> List.map .match
+                |> String.join " "
+
+        Nothing ->
+            ""
+
+
+replace : Model -> String -> String
+replace model originalString =
+    let
+        maybeRegex =
+            Pattern.fromString model.sourceSearch
+                |> Pattern.toRegexp
+    in
+    case maybeRegex of
+        Just regex ->
+            Regex.replace regex (\_ -> model.sourceReplace) originalString
+
+        Nothing ->
+            originalString
 
 
 view : Model -> Html Msg
@@ -2361,11 +2399,11 @@ viewReadOnlyFile model onClickMsg canBeSearchedAndReplaced file =
                         [ text file.name ]
 
                     ( searchedString, "" ) ->
-                        highlight searchedString file.name
+                        highlight (matches model file.name) file.name
 
-                    ( searchedString, replacementString ) ->
+                    ( _, replacementString ) ->
                         file.name
-                            |> String.replace searchedString replacementString
+                            |> replace model
                             |> highlight replacementString
 
             else
