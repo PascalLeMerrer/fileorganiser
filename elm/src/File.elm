@@ -1,4 +1,4 @@
-module File exposing (File, FileStatus(..), defaultDir, fileDecoder, selectNext, selectPrevious, toggleSelectionStatus, withName, withParentPath, withStatus)
+module File exposing (File, FileStatus(..), defaultDir, extendSelectionToNext, extendSelectionToPrevious, fileDecoder, selectNext, selectPrevious, toggleSelectionStatus, withName, withParentPath, withStatus)
 
 import Iso8601
 import Json.Decode exposing (Decoder)
@@ -43,6 +43,72 @@ defaultDir =
     , size = 0
     , status = Unselected
     }
+
+
+extendSelectionToNext : List File -> List File
+extendSelectionToNext files =
+    let
+        ( isAtLeastOneFileSelected, updatedFiles ) =
+            extendSelection List.Extra.mapAccuml files
+    in
+    if isAtLeastOneFileSelected then
+        updatedFiles
+
+    else
+        updatedFiles
+            |> selectLast
+
+
+extendSelectionToPrevious : List File -> List File
+extendSelectionToPrevious files =
+    let
+        ( isAtLeastOneFileSelected, updatedFiles ) =
+            extendSelection List.Extra.mapAccumr files
+    in
+    if isAtLeastOneFileSelected then
+        updatedFiles
+
+    else
+        updatedFiles
+            |> selectLast
+
+
+extendSelection :
+    ((SelectionAccumulator -> File -> ( SelectionAccumulator, File )) -> SelectionAccumulator -> List File -> ( SelectionAccumulator, List File ))
+    -> List File
+    -> ( Bool, List File )
+extendSelection visit files =
+    let
+        ( finalAccumulator, updatedFiles ) =
+            visit
+                (\acc file ->
+                    let
+                        newAcc : SelectionAccumulator
+                        newAcc =
+                            { acc | isPreviousSelected = file.status == Selected }
+                    in
+                    if acc.isPreviousSelected then
+                        ( { newAcc | selectedCount = acc.selectedCount + 1 }
+                        , { file | status = Selected }
+                        )
+
+                    else
+                        ( newAcc, file )
+                )
+                initialAccumulator
+                files
+
+        initialAccumulator : SelectionAccumulator
+        initialAccumulator =
+            { isPreviousSelected = False
+            , selectedCount = 0
+            }
+
+        isAtLeastOneFileSelected : Bool
+        isAtLeastOneFileSelected =
+            finalAccumulator.selectedCount > 0
+    in
+    ( isAtLeastOneFileSelected, updatedFiles )
 
 
 fileDecoder : Decoder File

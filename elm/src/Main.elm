@@ -2,7 +2,7 @@ port module Main exposing (Command, FocusedZone, Model, Msg, Operation, defaultM
 
 import Browser
 import Browser.Dom
-import File exposing (File, FileStatus(..), defaultDir, fileDecoder, selectNext, selectPrevious, toggleSelectionStatus, withName, withParentPath, withStatus)
+import File exposing (File, FileStatus(..), defaultDir, extendSelectionToNext, extendSelectionToPrevious, fileDecoder, selectNext, selectPrevious, toggleSelectionStatus, withName, withParentPath, withStatus)
 import Filesize
 import Html exposing (Html, button, div, footer, form, h2, input, span, text)
 import Html.Attributes exposing (class, disabled, id, placeholder, tabindex, type_, value)
@@ -1111,7 +1111,7 @@ processMainShortcuts model target event =
             ( Key.Delete, False ) ->
                 prepareSelectedFilesForRemoval model
 
-            ( Key.Down, _ ) ->
+            ( Key.Down, False ) ->
                 case target of
                     Source ->
                         ( { model | sourceFiles = selectNext model.sourceFiles }, Cmd.none )
@@ -1119,19 +1119,35 @@ processMainShortcuts model target event =
                     Destination ->
                         ( { model | destinationFiles = selectNext model.destinationFiles }, Cmd.none )
 
+            ( Key.Down, True ) ->
+                case target of
+                    Source ->
+                        ( { model | sourceFiles = extendSelectionToNext model.sourceFiles }, Cmd.none )
+
+                    Destination ->
+                        ( { model | destinationFiles = extendSelectionToNext model.destinationFiles }, Cmd.none )
+
             ( Key.F2, False ) ->
                 renameSelectedSourceFile model
 
             ( Key.F5, False ) ->
                 reload model target
 
-            ( Key.Up, _ ) ->
+            ( Key.Up, False ) ->
                 case target of
                     Source ->
                         ( { model | sourceFiles = selectPrevious model.sourceFiles }, Cmd.none )
 
                     Destination ->
                         ( { model | destinationFiles = selectPrevious model.destinationFiles }, Cmd.none )
+
+            ( Key.Up, True ) ->
+                case target of
+                    Source ->
+                        ( { model | sourceFiles = extendSelectionToPrevious model.sourceFiles }, Cmd.none )
+
+                    Destination ->
+                        ( { model | destinationFiles = extendSelectionToPrevious model.destinationFiles }, Cmd.none )
 
             _ ->
                 ( model, Cmd.none )
