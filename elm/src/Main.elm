@@ -204,6 +204,7 @@ type Msg
     | UserChangedSourceReplace String
     | UserChangedSourceSearch String
     | UserClickedCancel
+    | UserClickedCopyFilterButton
     | UserClickedClearSourceFilter
     | UserClickedClearDestinationDirectoryFilter
     | UserClickedClearDestinationFilesFilter
@@ -217,8 +218,6 @@ type Msg
     | UserClickedSourceDirectory Bool File -- isAbsolute, source
     | UserClickedSourceDirectoryButton
     | UserClickedSourceFile File
-    | UserClickedSynchronizeDirFilterButton
-    | UserClickedSynchronizeFileFilterButton
     | UserChangedFocusedZone FocusedZone
     | UserModifiedFileName String
     | UserModifiedDirName String
@@ -1365,26 +1364,6 @@ subscriptions _ =
         ]
 
 
-synchronizeDestinationDirFilter : Model -> Model
-synchronizeDestinationDirFilter model =
-    if model.applySourceFilterToDestinationDirectories then
-        { model | destinationDirectoryFilter = model.sourceFilter }
-            |> filterDestinationDirectories
-
-    else
-        model
-
-
-synchronizeDestinationFilesFilter : Model -> Model
-synchronizeDestinationFilesFilter model =
-    if model.applySourceFilterToDestinationFiles then
-        { model | destinationFilesFilter = model.sourceFilter }
-            |> filterDestinationFiles
-
-    else
-        model
-
-
 type Target
     = Source
     | Destination
@@ -1736,8 +1715,6 @@ update msg model =
         UserChangedSourceFilter filteringString ->
             ( { model | sourceFilter = filteringString }
                 |> filterSourceFiles
-                |> synchronizeDestinationDirFilter
-                |> synchronizeDestinationFilesFilter
             , Cmd.none
             )
 
@@ -1772,7 +1749,6 @@ update msg model =
         UserClickedClearSourceFilter ->
             ( { model | sourceFilter = "" }
                 |> filterSourceFiles
-                |> synchronizeDestinationDirFilter
             , Cmd.none
             )
 
@@ -1879,18 +1855,6 @@ update msg model =
             , focusOn "container-left" NoOp
             )
 
-        UserClickedSynchronizeDirFilterButton ->
-            ( { model | applySourceFilterToDestinationDirectories = not model.applySourceFilterToDestinationDirectories }
-                |> synchronizeDestinationDirFilter
-            , Cmd.none
-            )
-
-        UserClickedSynchronizeFileFilterButton ->
-            ( { model | applySourceFilterToDestinationFiles = not model.applySourceFilterToDestinationFiles }
-                |> synchronizeDestinationFilesFilter
-            , Cmd.none
-            )
-
         UserChangedFocusedZone focus ->
             ( { model
                 | focusedZone = focus
@@ -1962,6 +1926,16 @@ update msg model =
 
                 _ ->
                     ( model, Cmd.none )
+
+        UserClickedCopyFilterButton ->
+            ( { model
+                | destinationFilesFilter = model.sourceFilter
+                , destinationDirectoryFilter = model.sourceFilter
+              }
+                |> filterDestinationFiles
+                |> filterDestinationDirectories
+            , Cmd.none
+            )
 
 
 view : Model -> Html Msg
@@ -2066,13 +2040,6 @@ viewDestinationDirectoryFilter model =
             , disabled model.applySourceFilterToDestinationDirectories
             ]
             [ text "Clear" ]
-        , button [ class "btn link", onClick UserClickedSynchronizeDirFilterButton ]
-            [ if model.applySourceFilterToDestinationDirectories then
-                text "Unlink"
-
-              else
-                text "Link"
-            ]
         ]
 
 
@@ -2114,13 +2081,6 @@ viewDestinationFilesFilter model =
             , disabled model.applySourceFilterToDestinationFiles
             ]
             [ text "Clear" ]
-        , button [ class "btn link", onClick UserClickedSynchronizeFileFilterButton ]
-            [ if model.applySourceFilterToDestinationFiles then
-                text "Unlink"
-
-              else
-                text "Link"
-            ]
         ]
 
 
@@ -2498,6 +2458,7 @@ viewSourceFiles model =
                 ]
                 []
             , button [ class "btn", onClick UserClickedClearSourceFilter ] [ text "Clear" ]
+            , button [ class "btn", onClick UserClickedCopyFilterButton ] [ text "Copy" ]
             ]
         , div
             [ class "panel-content" ]
