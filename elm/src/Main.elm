@@ -1117,7 +1117,6 @@ processMainShortcuts model target event =
                         ( { model | sourceFiles = selectNext model.sourceFiles }, Cmd.none )
 
                     Destination ->
-                        -- FIXME it should be possible to do that in destination dirs too
                         ( { model | destinationFiles = selectNext model.destinationFiles }, Cmd.none )
 
             ( Key.F2, False ) ->
@@ -1132,7 +1131,6 @@ processMainShortcuts model target event =
                         ( { model | sourceFiles = selectPrevious model.sourceFiles }, Cmd.none )
 
                     Destination ->
-                        -- FIXME it should be possible to do that in destination dirs too
                         ( { model | destinationFiles = selectPrevious model.destinationFiles }, Cmd.none )
 
             _ ->
