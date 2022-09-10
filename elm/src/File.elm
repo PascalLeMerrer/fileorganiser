@@ -71,34 +71,8 @@ selectFirst files =
 selectNext : List File -> List File
 selectNext files =
     let
-        ( finalAccumulator, updatedFiles ) =
-            List.Extra.mapAccuml
-                (\acc file ->
-                    let
-                        newAcc : SelectionAccumulator
-                        newAcc =
-                            { acc | isPreviousSelected = file.status == Selected }
-                    in
-                    if acc.isPreviousSelected then
-                        ( { newAcc | selectedCount = acc.selectedCount + 1 }
-                        , { file | status = Selected }
-                        )
-
-                    else
-                        ( newAcc, { file | status = Unselected } )
-                )
-                initialAccumulator
-                files
-
-        initialAccumulator : SelectionAccumulator
-        initialAccumulator =
-            { isPreviousSelected = False
-            , selectedCount = 0
-            }
-
-        isAtLeastOneFileSelected : Bool
-        isAtLeastOneFileSelected =
-            finalAccumulator.selectedCount > 0
+        ( isAtLeastOneFileSelected, updatedFiles ) =
+            selectNextOrPrevious List.Extra.mapAccuml files
     in
     if isAtLeastOneFileSelected then
         updatedFiles
@@ -111,8 +85,25 @@ selectNext files =
 selectPrevious : List File -> List File
 selectPrevious files =
     let
+        ( isAtLeastOneFileSelected, updatedFiles ) =
+            selectNextOrPrevious List.Extra.mapAccumr files
+    in
+    if isAtLeastOneFileSelected then
+        updatedFiles
+
+    else
+        updatedFiles
+            |> selectFirst
+
+
+selectNextOrPrevious :
+    ((SelectionAccumulator -> File -> ( SelectionAccumulator, File )) -> SelectionAccumulator -> List File -> ( SelectionAccumulator, List File ))
+    -> List File
+    -> ( Bool, List File )
+selectNextOrPrevious visit files =
+    let
         ( finalAccumulator, updatedFiles ) =
-            List.Extra.mapAccumr
+            visit
                 (\acc file ->
                     let
                         newAcc : SelectionAccumulator
@@ -140,12 +131,7 @@ selectPrevious files =
         isAtLeastOneFileSelected =
             finalAccumulator.selectedCount > 0
     in
-    if isAtLeastOneFileSelected then
-        updatedFiles
-
-    else
-        updatedFiles
-            |> selectFirst
+    ( isAtLeastOneFileSelected, updatedFiles )
 
 
 toggleSelectionStatus : File -> File
