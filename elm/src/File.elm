@@ -1,4 +1,4 @@
-module File exposing (File, FileStatus(..), defaultDir, fileDecoder, selectNext, toggleSelectionStatus, withName, withParentPath, withStatus)
+module File exposing (File, FileStatus(..), defaultDir, fileDecoder, selectNext, selectPrevious, toggleSelectionStatus, withName, withParentPath, withStatus)
 
 import Iso8601
 import Json.Decode exposing (Decoder)
@@ -63,6 +63,11 @@ selectLast files =
     List.Extra.updateAt (List.length files - 1) (\f -> { f | status = Selected }) files
 
 
+selectFirst : List File -> List File
+selectFirst files =
+    List.Extra.updateAt 0 (\f -> { f | status = Selected }) files
+
+
 selectNext : List File -> List File
 selectNext files =
     let
@@ -101,6 +106,46 @@ selectNext files =
     else
         updatedFiles
             |> selectLast
+
+
+selectPrevious : List File -> List File
+selectPrevious files =
+    let
+        ( finalAccumulator, updatedFiles ) =
+            List.Extra.mapAccumr
+                (\acc file ->
+                    let
+                        newAcc : SelectionAccumulator
+                        newAcc =
+                            { acc | isPreviousSelected = file.status == Selected }
+                    in
+                    if acc.isPreviousSelected then
+                        ( { newAcc | selectedCount = acc.selectedCount + 1 }
+                        , { file | status = Selected }
+                        )
+
+                    else
+                        ( newAcc, { file | status = Unselected } )
+                )
+                initialAccumulator
+                files
+
+        initialAccumulator : SelectionAccumulator
+        initialAccumulator =
+            { isPreviousSelected = False
+            , selectedCount = 0
+            }
+
+        isAtLeastOneFileSelected : Bool
+        isAtLeastOneFileSelected =
+            finalAccumulator.selectedCount > 0
+    in
+    if isAtLeastOneFileSelected then
+        updatedFiles
+
+    else
+        updatedFiles
+            |> selectFirst
 
 
 toggleSelectionStatus : File -> File

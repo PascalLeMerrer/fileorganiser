@@ -2,7 +2,7 @@ port module Main exposing (Command, FocusedZone, Model, Msg, Operation, defaultM
 
 import Browser
 import Browser.Dom
-import File exposing (File, FileStatus(..), defaultDir, fileDecoder, selectNext, toggleSelectionStatus, withName, withParentPath, withStatus)
+import File exposing (File, FileStatus(..), defaultDir, fileDecoder, selectNext, selectPrevious, toggleSelectionStatus, withName, withParentPath, withStatus)
 import Filesize
 import Html exposing (Html, button, div, footer, form, h2, input, span, text)
 import Html.Attributes exposing (class, disabled, id, placeholder, tabindex, type_, value)
@@ -1108,6 +1108,9 @@ processMainShortcuts model target event =
             ( Key.Left, _ ) ->
                 goBack model target
 
+            ( Key.Delete, False ) ->
+                prepareSelectedFilesForRemoval model
+
             ( Key.Down, _ ) ->
                 case target of
                     Source ->
@@ -1117,14 +1120,20 @@ processMainShortcuts model target event =
                         -- FIXME it should be possible to do that in destination dirs too
                         ( { model | destinationFiles = selectNext model.destinationFiles }, Cmd.none )
 
-            ( Key.Delete, False ) ->
-                prepareSelectedFilesForRemoval model
-
             ( Key.F2, False ) ->
                 renameSelectedSourceFile model
 
             ( Key.F5, False ) ->
                 reload model target
+
+            ( Key.Up, _ ) ->
+                case target of
+                    Source ->
+                        ( { model | sourceFiles = selectPrevious model.sourceFiles }, Cmd.none )
+
+                    Destination ->
+                        -- FIXME it should be possible to do that in destination dirs too
+                        ( { model | destinationFiles = selectPrevious model.destinationFiles }, Cmd.none )
 
             _ ->
                 ( model, Cmd.none )
