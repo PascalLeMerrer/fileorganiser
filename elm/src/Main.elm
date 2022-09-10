@@ -1,14 +1,13 @@
-port module Main exposing (Command, File, FileStatus(..), FocusedZone, Model, Msg, Operation, defaultDir, defaultModel, filterDestinationDirectories, main, pathElements, select, truncateConcatenatedNames, withName, withParentPath, withStatus)
+port module Main exposing (Command, FocusedZone, Model, Msg, Operation, defaultModel, filterDestinationDirectories, main, pathElements, select, truncateConcatenatedNames)
 
 import Browser
 import Browser.Dom
+import File exposing (File, FileStatus(..), defaultDir, fileDecoder, selectNext, toggleSelectionStatus, withName, withParentPath, withStatus)
 import Filesize
 import Html exposing (Html, button, div, footer, form, h2, input, span, text)
 import Html.Attributes exposing (class, disabled, id, placeholder, tabindex, type_, value)
 import Html.Events as Events exposing (onClick, onFocus, onInput, onSubmit)
-import Iso8601
-import Json.Decode exposing (Decoder, list)
-import Json.Decode.Pipeline exposing (hardcoded, required)
+import Json.Decode exposing (list)
 import Json.Encode
 import Keyboard.Event exposing (KeyboardEvent, decodeKeyboardEvent)
 import Keyboard.Key as Key
@@ -17,7 +16,7 @@ import Pattern
 import Regex
 import String.Mark as Mark exposing (defaultOptions, multiWord)
 import Task
-import Time exposing (Month(..), Posix, millisToPosix)
+import Time exposing (Month(..))
 
 
 
@@ -117,29 +116,6 @@ type alias Command =
     }
 
 
-
--- TODO move to its own module
-
-
-type alias File =
-    { isDir : Bool
-    , mode : Int
-    , modTime : Posix
-    , name : String
-    , parentPath : String
-    , satisfiesFilter : Bool
-    , size : Int
-    , status : FileStatus
-    }
-
-
-type FileStatus
-    = Unselected
-    | Edited
-    | Selected
-    | SelectedForDeletion
-
-
 type FocusedZone
     = Confirmation
     | ErrorMessage
@@ -232,19 +208,6 @@ type Operation
     | Rename
 
 
-defaultDir : File
-defaultDir =
-    { isDir = True
-    , mode = 777
-    , modTime = millisToPosix 0
-    , name = ""
-    , parentPath = ""
-    , satisfiesFilter = False
-    , size = 0
-    , status = Unselected
-    }
-
-
 defaultModel : Model
 defaultModel =
     { applySourceFilterToDestinationDirectories = False
@@ -327,12 +290,12 @@ pathElements model acc path =
 
 
 select : Model -> List File -> File -> List File
-select model files clikedFile =
+select model files clickedFile =
     if model.isShiftPressed then
         let
             indexOfClickedElement : Int
             indexOfClickedElement =
-                List.Extra.elemIndex clikedFile files
+                List.Extra.elemIndex clickedFile files
                     |> Maybe.withDefault 0
 
             indexOfFirstSelectedElement : Int
@@ -383,7 +346,7 @@ select model files clikedFile =
         files
             |> List.map
                 (\f ->
-                    if f == clikedFile then
+                    if f == clickedFile then
                         toggleSelectionStatus f
 
                     else if model.isControlPressed then
@@ -416,23 +379,8 @@ truncateConcatenatedNames maxLength elements =
             []
 
 
-withName : String -> File -> File
-withName name file =
-    { file | name = name }
-
-
 
 -- UPDATE
-
-
-withParentPath : String -> File -> File
-withParentPath path file =
-    { file | parentPath = path }
-
-
-withStatus : FileStatus -> File -> File
-withStatus fileStatus file =
-    { file | status = fileStatus }
 
 
 additionalHeaderClass : Model -> FocusedZone -> String
@@ -667,19 +615,6 @@ fileCount model target =
             ++ ")"
             ++ inflect totalCount
             ++ " in directory"
-
-
-fileDecoder : Decoder File
-fileDecoder =
-    Json.Decode.succeed File
-        |> required "IsDir" Json.Decode.bool
-        |> required "Mode" Json.Decode.int
-        |> required "ModTime" Iso8601.decoder
-        |> required "Name" Json.Decode.string
-        |> required "DirPath" Json.Decode.string
-        |> hardcoded False
-        |> required "Size" Json.Decode.int
-        |> hardcoded Unselected
 
 
 filterByName : List String -> File -> Bool
@@ -1173,6 +1108,15 @@ processMainShortcuts model target event =
             ( Key.Left, _ ) ->
                 goBack model target
 
+            ( Key.Down, _ ) ->
+                case target of
+                    Source ->
+                        ( { model | sourceFiles = selectNext model.sourceFiles }, Cmd.none )
+
+                    Destination ->
+                        -- FIXME it should be possible to do that in destination dirs too
+                        ( { model | destinationFiles = selectNext model.destinationFiles }, Cmd.none )
+
             ( Key.Delete, False ) ->
                 prepareSelectedFilesForRemoval model
 
@@ -1367,23 +1311,6 @@ subscriptions _ =
 type Target
     = Source
     | Destination
-
-
-toggleSelectionStatus : File -> File
-toggleSelectionStatus file =
-    case file.status of
-        Unselected ->
-            { file | status = Selected }
-
-        Edited ->
-            { file | status = Selected }
-
-        Selected ->
-            { file | status = Unselected }
-
-        SelectedForDeletion ->
-            -- TODO  Remove from the list of files selected for deletion?
-            { file | status = Selected }
 
 
 undo : Model -> ( Model, Cmd Msg )
@@ -1746,6 +1673,16 @@ update msg model =
             , focusOn "container-left" NoOp
             )
 
+        UserClickedCopyFilterButton ->
+            ( { model
+                | destinationDirectoryFilter = model.sourceFilter
+                , destinationFilesFilter = model.sourceFilter
+              }
+                |> filterDestinationFiles
+                |> filterDestinationDirectories
+            , Cmd.none
+            )
+
         UserClickedClearSourceFilter ->
             ( { model | sourceFilter = "" }
                 |> filterSourceFiles
@@ -1926,16 +1863,6 @@ update msg model =
 
                 _ ->
                     ( model, Cmd.none )
-
-        UserClickedCopyFilterButton ->
-            ( { model
-                | destinationFilesFilter = model.sourceFilter
-                , destinationDirectoryFilter = model.sourceFilter
-              }
-                |> filterDestinationFiles
-                |> filterDestinationDirectories
-            , Cmd.none
-            )
 
 
 view : Model -> Html Msg
