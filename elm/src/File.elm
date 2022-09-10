@@ -26,12 +26,6 @@ type FileStatus
     | SelectedForDeletion
 
 
-type alias SelectionAccumulator =
-    { isPreviousSelected : Bool
-    , selectedCount : Int
-    }
-
-
 defaultDir : File
 defaultDir =
     { isDir = True
@@ -73,6 +67,79 @@ extendSelectionToPrevious files =
             |> selectLast
 
 
+fileDecoder : Decoder File
+fileDecoder =
+    Json.Decode.succeed File
+        |> required "IsDir" Json.Decode.bool
+        |> required "Mode" Json.Decode.int
+        |> required "ModTime" Iso8601.decoder
+        |> required "Name" Json.Decode.string
+        |> required "DirPath" Json.Decode.string
+        |> hardcoded False
+        |> required "Size" Json.Decode.int
+        |> hardcoded Unselected
+
+
+selectNext : List File -> List File
+selectNext files =
+    let
+        ( isAtLeastOneFileSelected, updatedFiles ) =
+            selectNextOrPrevious List.Extra.mapAccuml files
+    in
+    if isAtLeastOneFileSelected then
+        updatedFiles
+
+    else
+        updatedFiles
+            |> selectLast
+
+
+selectPrevious : List File -> List File
+selectPrevious files =
+    let
+        ( isAtLeastOneFileSelected, updatedFiles ) =
+            selectNextOrPrevious List.Extra.mapAccumr files
+    in
+    if isAtLeastOneFileSelected then
+        updatedFiles
+
+    else
+        updatedFiles
+            |> selectFirst
+
+
+toggleSelectionStatus : File -> File
+toggleSelectionStatus file =
+    case file.status of
+        Unselected ->
+            { file | status = Selected }
+
+        Edited ->
+            { file | status = Selected }
+
+        Selected ->
+            { file | status = Unselected }
+
+        SelectedForDeletion ->
+            -- TODO  Remove from the list of files selected for deletion?
+            { file | status = Selected }
+
+
+withName : String -> File -> File
+withName name file =
+    { file | name = name }
+
+
+withParentPath : String -> File -> File
+withParentPath path file =
+    { file | parentPath = path }
+
+
+withStatus : FileStatus -> File -> File
+withStatus fileStatus file =
+    { file | status = fileStatus }
+
+
 extendSelection :
     ((SelectionAccumulator -> File -> ( SelectionAccumulator, File )) -> SelectionAccumulator -> List File -> ( SelectionAccumulator, List File ))
     -> List File
@@ -111,55 +178,14 @@ extendSelection visit files =
     ( isAtLeastOneFileSelected, updatedFiles )
 
 
-fileDecoder : Decoder File
-fileDecoder =
-    Json.Decode.succeed File
-        |> required "IsDir" Json.Decode.bool
-        |> required "Mode" Json.Decode.int
-        |> required "ModTime" Iso8601.decoder
-        |> required "Name" Json.Decode.string
-        |> required "DirPath" Json.Decode.string
-        |> hardcoded False
-        |> required "Size" Json.Decode.int
-        |> hardcoded Unselected
-
-
-selectLast : List File -> List File
-selectLast files =
-    List.Extra.updateAt (List.length files - 1) (\f -> { f | status = Selected }) files
-
-
 selectFirst : List File -> List File
 selectFirst files =
     List.Extra.updateAt 0 (\f -> { f | status = Selected }) files
 
 
-selectNext : List File -> List File
-selectNext files =
-    let
-        ( isAtLeastOneFileSelected, updatedFiles ) =
-            selectNextOrPrevious List.Extra.mapAccuml files
-    in
-    if isAtLeastOneFileSelected then
-        updatedFiles
-
-    else
-        updatedFiles
-            |> selectLast
-
-
-selectPrevious : List File -> List File
-selectPrevious files =
-    let
-        ( isAtLeastOneFileSelected, updatedFiles ) =
-            selectNextOrPrevious List.Extra.mapAccumr files
-    in
-    if isAtLeastOneFileSelected then
-        updatedFiles
-
-    else
-        updatedFiles
-            |> selectFirst
+selectLast : List File -> List File
+selectLast files =
+    List.Extra.updateAt (List.length files - 1) (\f -> { f | status = Selected }) files
 
 
 selectNextOrPrevious :
@@ -200,33 +226,7 @@ selectNextOrPrevious visit files =
     ( isAtLeastOneFileSelected, updatedFiles )
 
 
-toggleSelectionStatus : File -> File
-toggleSelectionStatus file =
-    case file.status of
-        Unselected ->
-            { file | status = Selected }
-
-        Edited ->
-            { file | status = Selected }
-
-        Selected ->
-            { file | status = Unselected }
-
-        SelectedForDeletion ->
-            -- TODO  Remove from the list of files selected for deletion?
-            { file | status = Selected }
-
-
-withName : String -> File -> File
-withName name file =
-    { file | name = name }
-
-
-withParentPath : String -> File -> File
-withParentPath path file =
-    { file | parentPath = path }
-
-
-withStatus : FileStatus -> File -> File
-withStatus fileStatus file =
-    { file | status = fileStatus }
+type alias SelectionAccumulator =
+    { isPreviousSelected : Bool
+    , selectedCount : Int
+    }

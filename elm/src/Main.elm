@@ -1108,30 +1108,13 @@ processMainShortcuts model target event =
             ( Key.Left, _ ) ->
                 goBack model target
 
-            ( Key.Delete, False ) ->
-                prepareSelectedFilesForRemoval model
-
-            ( Key.Down, False ) ->
+            ( Key.Up, True ) ->
                 case target of
                     Source ->
-                        ( { model | sourceFiles = selectNext model.sourceFiles }, Cmd.none )
+                        ( { model | sourceFiles = extendSelectionToPrevious model.sourceFiles }, Cmd.none )
 
                     Destination ->
-                        ( { model | destinationFiles = selectNext model.destinationFiles }, Cmd.none )
-
-            ( Key.Down, True ) ->
-                case target of
-                    Source ->
-                        ( { model | sourceFiles = extendSelectionToNext model.sourceFiles }, Cmd.none )
-
-                    Destination ->
-                        ( { model | destinationFiles = extendSelectionToNext model.destinationFiles }, Cmd.none )
-
-            ( Key.F2, False ) ->
-                renameSelectedSourceFile model
-
-            ( Key.F5, False ) ->
-                reload model target
+                        ( { model | destinationFiles = extendSelectionToPrevious model.destinationFiles }, Cmd.none )
 
             ( Key.Up, False ) ->
                 case target of
@@ -1141,13 +1124,30 @@ processMainShortcuts model target event =
                     Destination ->
                         ( { model | destinationFiles = selectPrevious model.destinationFiles }, Cmd.none )
 
-            ( Key.Up, True ) ->
+            ( Key.Down, True ) ->
                 case target of
                     Source ->
-                        ( { model | sourceFiles = extendSelectionToPrevious model.sourceFiles }, Cmd.none )
+                        ( { model | sourceFiles = extendSelectionToNext model.sourceFiles }, Cmd.none )
 
                     Destination ->
-                        ( { model | destinationFiles = extendSelectionToPrevious model.destinationFiles }, Cmd.none )
+                        ( { model | destinationFiles = extendSelectionToNext model.destinationFiles }, Cmd.none )
+
+            ( Key.Down, False ) ->
+                case target of
+                    Source ->
+                        ( { model | sourceFiles = selectNext model.sourceFiles }, Cmd.none )
+
+                    Destination ->
+                        ( { model | destinationFiles = selectNext model.destinationFiles }, Cmd.none )
+
+            ( Key.Delete, False ) ->
+                prepareSelectedFilesForRemoval model
+
+            ( Key.F2, False ) ->
+                renameSelectedSourceFile model
+
+            ( Key.F5, False ) ->
+                reload model target
 
             _ ->
                 ( model, Cmd.none )
