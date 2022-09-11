@@ -32,7 +32,7 @@ toRegexp pattern =
                         "(" ++ string ++ ")"
 
                     Joker ->
-                        "(.+)"
+                        "(.*?)"
             )
         |> String.concat
         |> Regex.fromString
