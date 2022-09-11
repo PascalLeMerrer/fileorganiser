@@ -1,4 +1,4 @@
-port module Main exposing (Command, FocusedZone, Model, Msg, Operation, defaultModel, filterDestinationDirectories, main, pathElements, select, truncateConcatenatedNames)
+port module Main exposing (Command, FocusedZone, Model, Msg, Operation, defaultModel, filterDestinationDirectories, main, pathElements, select, truncateConcatenatedNames, unixPathSep, windowsPathSep)
 
 import Browser
 import Browser.Dom
@@ -273,16 +273,6 @@ main =
         , update = update
         , view = view
         }
-
-
-pathElements : Model -> List File -> String -> List File
-pathElements model acc path =
-    if path == "." then
-        []
-
-    else
-        pathElementsRecursive model acc path
-            |> List.reverse
 
 
 
@@ -928,6 +918,16 @@ parentDir model path =
     String.slice 0 index path
 
 
+pathElements : Model -> List File -> String -> List File
+pathElements model acc path =
+    if path == "." then
+        []
+
+    else
+        pathElementsRecursive model acc path
+            |> List.reverse
+
+
 pathElementsRecursive : Model -> List File -> String -> List File
 pathElementsRecursive model acc path =
     let
@@ -956,14 +956,21 @@ pathElementsRecursive model acc path =
         parentPath : String
         parentPath =
             parentDir model path
+
+        parentIsRootDir =
+            -- Windows path starts by a drive letter follower by column (like "C:")
+            (model.pathSeparator == unixPathSep)
+                && (String.length parentPath == 0)
+                || (model.pathSeparator == windowsPathSep)
+                && (String.length parentPath == 2)
     in
-    if String.length parentPath > 0 then
+    if parentIsRootDir then
         file
-            :: pathElementsRecursive model acc parentPath
+            :: acc
 
     else
         file
-            :: acc
+            :: pathElementsRecursive model acc parentPath
 
 
 prepareSelectedFilesForRemoval : Model -> ( Model, Cmd Msg )

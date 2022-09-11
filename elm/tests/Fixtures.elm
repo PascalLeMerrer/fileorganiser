@@ -1,4 +1,4 @@
-module Fixtures exposing (allDirs, dir1, dir2, dir3, dir4, dir5, filteredDir1, filteredDir2, filteredDir3, filteredDir4, filteredDir5, model)
+module Fixtures exposing (allDirs, dir1, dir2, dir3, dir4, dir5, filteredDir1, filteredDir2, filteredDir3, filteredDir4, filteredDir5, model, windowsDir)
 
 import File exposing (File, FileStatus(..))
 import Main exposing (Model, defaultModel)
@@ -87,3 +87,11 @@ model =
 withSatisfiedFilter : File -> File
 withSatisfiedFilter file =
     { file | satisfiesFilter = True }
+
+
+windowsDir : File
+windowsDir =
+    { dir1
+        | name = "windows dir"
+        , parentPath = "C:\\some\\path\\extended"
+    }
