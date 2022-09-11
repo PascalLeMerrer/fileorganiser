@@ -53,42 +53,44 @@ suite =
                                 |> filterDestinationDirectories
                     in
                     Expect.equal expected filteredModel.destinationSubdirectories
-            , test "pathElements returns the list of nested path and their names" <|
-                \_ ->
-                    let
-                        elements : List File
-                        elements =
-                            pathElements defaultModel [] <| dir5.parentPath ++ defaultModel.pathSeparator ++ dir5.name
+            , describe "pathElements"
+                [ test "pathElements returns the list of nested path and their names" <|
+                    \_ ->
+                        let
+                            elements : List File
+                            elements =
+                                pathElements defaultModel [] <| dir5.parentPath ++ defaultModel.pathSeparator ++ dir5.name
 
-                        expected : List File
-                        expected =
-                            [ defaultDir
-                                |> withName "some"
-                                |> withParentPath ""
-                            , defaultDir
-                                |> withName "path"
-                                |> withParentPath "/some"
-                            , defaultDir
-                                |> withName "extended"
-                                |> withParentPath "/some/path"
-                            , defaultDir
-                                |> withName "dir5"
-                                |> withParentPath "/some/path/extended"
-                            ]
-                    in
-                    Expect.equal expected elements
-            , test "pathElements ignores ." <|
-                \_ ->
-                    let
-                        elements : List File
-                        elements =
-                            pathElements defaultModel [] "."
+                            expected : List File
+                            expected =
+                                [ defaultDir
+                                    |> withName "some"
+                                    |> withParentPath ""
+                                , defaultDir
+                                    |> withName "path"
+                                    |> withParentPath "/some"
+                                , defaultDir
+                                    |> withName "extended"
+                                    |> withParentPath "/some/path"
+                                , defaultDir
+                                    |> withName "dir5"
+                                    |> withParentPath "/some/path/extended"
+                                ]
+                        in
+                        Expect.equal expected elements
+                , test "pathElements ignores ." <|
+                    \_ ->
+                        let
+                            elements : List File
+                            elements =
+                                pathElements defaultModel [] "."
 
-                        expected : List File
-                        expected =
-                            []
-                    in
-                    Expect.equal expected elements
+                            expected : List File
+                            expected =
+                                []
+                        in
+                        Expect.equal expected elements
+                ]
             , test "truncate returns a list of files whose cumulated name length does not exceed given size" <|
                 \_ ->
                     let
