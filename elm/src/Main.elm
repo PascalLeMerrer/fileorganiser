@@ -1454,6 +1454,7 @@ update msg model =
                 |> changeDestinationDirectory newDirPath
             , Cmd.batch
                 [ getDestinationSubdirectories newDirPath
+                , getDestinationDirectoryFiles newDirPath
                 , focusOn "container-right" NoOp
                 ]
             )
