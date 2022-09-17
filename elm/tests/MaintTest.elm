@@ -4,7 +4,7 @@ import Expect
 import File exposing (File, FileStatus(..), defaultDir, withName, withParentPath, withStatus)
 import Fixtures exposing (allDirs, dir1, dir2, dir3, dir4, dir5, filteredDir1, filteredDir2, filteredDir3, filteredDir4, filteredDir5, model, windowsDir)
 import Main exposing (Model, defaultModel, filterDestinationDirectories, pathElements, select, truncateConcatenatedNames, windowsPathSep)
-import Test exposing (Test, describe, only, test)
+import Test exposing (Test, describe, test)
 
 
 suite : Test
@@ -81,9 +81,6 @@ suite =
                 , test "pathElements returns the list of nested path and their names under Windows" <|
                     \_ ->
                         let
-                            windowsModel =
-                                { defaultModel | pathSeparator = windowsPathSep }
-
                             elements : List File
                             elements =
                                 pathElements windowsModel [] <|
@@ -106,6 +103,10 @@ suite =
                                     |> withName "windows dir"
                                     |> withParentPath "C:\\some\\path\\extended"
                                 ]
+
+                            windowsModel : Model
+                            windowsModel =
+                                { defaultModel | pathSeparator = windowsPathSep }
                         in
                         Expect.equal expected elements
                 , test "pathElements ignores ." <|

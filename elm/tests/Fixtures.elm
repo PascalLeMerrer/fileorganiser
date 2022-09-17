@@ -1,6 +1,6 @@
-module Fixtures exposing (allDirs, dir1, dir2, dir3, dir4, dir5, filteredDir1, filteredDir2, filteredDir3, filteredDir4, filteredDir5, model, windowsDir)
+module Fixtures exposing (allDirs, dir1, dir2, dir3, dir4, dir5, filteredDir1, filteredDir2, filteredDir3, filteredDir4, filteredDir5, filteredDir6, filteredDir7, filteredDir8, model, windowsDir)
 
-import File exposing (File, FileStatus(..))
+import File exposing (File, FileStatus(..), withName)
 import Main exposing (Model, defaultModel)
 import Time exposing (millisToPosix)
 
@@ -79,14 +79,24 @@ filteredDir5 =
     dir5 |> withSatisfiedFilter
 
 
+filteredDir6 : File
+filteredDir6 =
+    filteredDir1 |> withName "a name with random chars 1 [123]"
+
+
+filteredDir7 : File
+filteredDir7 =
+    filteredDir1 |> withName "a name with random chars 2 [456]"
+
+
+filteredDir8 : File
+filteredDir8 =
+    filteredDir1 |> withName "a name with random chars 3 [678] - Foo"
+
+
 model : Model
 model =
     { defaultModel | destinationSubdirectories = [] }
-
-
-withSatisfiedFilter : File -> File
-withSatisfiedFilter file =
-    { file | satisfiesFilter = True }
 
 
 windowsDir : File
@@ -95,3 +105,8 @@ windowsDir =
         | name = "windows dir"
         , parentPath = "C:\\some\\path\\extended"
     }
+
+
+withSatisfiedFilter : File -> File
+withSatisfiedFilter file =
+    { file | satisfiesFilter = True }

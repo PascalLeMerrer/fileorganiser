@@ -1,6 +1,7 @@
-module File exposing (File, FileStatus(..), defaultDir, extendSelectionToNext, extendSelectionToPrevious, fileDecoder, selectNext, selectPrevious, toggleSelectionStatus, withName, withParentPath, withStatus)
+module File exposing (File, FileStatus(..), defaultDir, extendSelectionToNext, extendSelectionToPrevious, fileDecoder, selectNext, selectPrevious, selectSimilar, toggleSelectionStatus, withName, withParentPath, withStatus)
 
 import Iso8601
+import JaroWinkler
 import Json.Decode exposing (Decoder)
 import Json.Decode.Pipeline exposing (hardcoded, required)
 import List.Extra
@@ -108,6 +109,25 @@ selectPrevious files =
             |> selectFirst
 
 
+
+{- selects files whose name have a high level of similarity -}
+
+
+selectSimilar : Float -> List File -> List File
+selectSimilar level files =
+    let
+        firstSelectedFile : Maybe File
+        firstSelectedFile =
+            List.Extra.find (\f -> f.status == Selected) files
+    in
+    case firstSelectedFile of
+        Just file ->
+            List.map (selectIfSimilar file.name level) files
+
+        Nothing ->
+            files
+
+
 toggleSelectionStatus : File -> File
 toggleSelectionStatus file =
     case file.status of
@@ -181,6 +201,15 @@ extendSelection visit files =
 selectFirst : List File -> List File
 selectFirst files =
     List.Extra.updateAt 0 (\f -> { f | status = Selected }) files
+
+
+selectIfSimilar : String -> Float -> File -> File
+selectIfSimilar referenceName level file =
+    if JaroWinkler.similarity referenceName file.name >= level then
+        { file | status = Selected }
+
+    else
+        { file | status = Unselected }
 
 
 selectLast : List File -> List File

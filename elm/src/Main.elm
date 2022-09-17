@@ -1,8 +1,8 @@
-port module Main exposing (Command, FocusedZone, Model, Msg, Operation, defaultModel, filterDestinationDirectories, main, pathElements, select, truncateConcatenatedNames, unixPathSep, windowsPathSep)
+port module Main exposing (Command, FocusedZone, Model, Msg, Operation, defaultModel, filterDestinationDirectories, main, pathElements, select, truncateConcatenatedNames, windowsPathSep)
 
 import Browser
 import Browser.Dom
-import File exposing (File, FileStatus(..), defaultDir, extendSelectionToNext, extendSelectionToPrevious, fileDecoder, selectNext, selectPrevious, toggleSelectionStatus, withName, withParentPath, withStatus)
+import File exposing (File, FileStatus(..), defaultDir, extendSelectionToNext, extendSelectionToPrevious, fileDecoder, selectNext, selectPrevious, selectSimilar, toggleSelectionStatus, withName, withParentPath, withStatus)
 import Filesize
 import Html exposing (Html, button, div, footer, form, h2, input, span, text)
 import Html.Attributes exposing (class, disabled, id, placeholder, tabindex, type_, value)
@@ -149,6 +149,7 @@ type alias Model =
     , isUndoing : Bool
     , previousFocusedZone : FocusedZone
     , pathSeparator : String
+    , similarityLevel : Float
     , sourceDirectoryPath : String
     , sourceFiles : List File
     , sourceFilter : String
@@ -231,6 +232,7 @@ defaultModel =
     , isUndoing = False
     , previousFocusedZone = LeftSide
     , pathSeparator = unixPathSep
+    , similarityLevel = 0.8
     , sourceDirectoryPath = "."
     , sourceFiles = []
     , sourceFilter = ""
@@ -277,6 +279,16 @@ main =
 
 
 -- MODEL
+
+
+pathElements : Model -> List File -> String -> List File
+pathElements model acc path =
+    if path == "." then
+        []
+
+    else
+        pathElementsRecursive model acc path
+            |> List.reverse
 
 
 select : Model -> List File -> File -> List File
@@ -371,6 +383,11 @@ truncateConcatenatedNames maxLength elements =
 
 
 -- UPDATE
+
+
+windowsPathSep : String
+windowsPathSep =
+    "\\"
 
 
 additionalHeaderClass : Model -> FocusedZone -> String
@@ -621,6 +638,10 @@ filterByName filters file =
         List.all (\word -> String.contains (String.toLower word) lowerCaseFilename) filters
 
 
+
+{- navigate t o the previous dir in history -}
+
+
 filterByParentPath : List String -> File -> Bool
 filterByParentPath filters file =
     if file.name == ".." then
@@ -633,10 +654,6 @@ filterByParentPath filters file =
                 String.toLower file.parentPath
         in
         List.all (\word -> String.contains (String.toLower word) lowerCaseParentPath) filters
-
-
-
-{- navigate t o the previous dir in history -}
 
 
 filterDestinationFiles : Model -> Model
@@ -659,13 +676,13 @@ filterDestinationFiles model =
             }
 
 
+
+-- TODO allow renaming destination files
+
+
 filterSelectedFiles : List File -> List File
 filterSelectedFiles files =
     List.filter (\f -> f.satisfiesFilter && f.status == Selected) files
-
-
-
--- TODO allow renaming destination files
 
 
 filterSourceFiles : Model -> Model
@@ -918,16 +935,6 @@ parentDir model path =
     String.slice 0 index path
 
 
-pathElements : Model -> List File -> String -> List File
-pathElements model acc path =
-    if path == "." then
-        []
-
-    else
-        pathElementsRecursive model acc path
-            |> List.reverse
-
-
 pathElementsRecursive : Model -> List File -> String -> List File
 pathElementsRecursive model acc path =
     let
@@ -953,16 +960,17 @@ pathElementsRecursive model acc path =
         leaf =
             String.slice lastPartIndex endIndex path
 
-        parentPath : String
-        parentPath =
-            parentDir model path
-
+        parentIsRootDir : Bool
         parentIsRootDir =
             -- Windows path starts by a drive letter follower by column (like "C:")
             (model.pathSeparator == unixPathSep)
                 && (String.length parentPath == 0)
                 || (model.pathSeparator == windowsPathSep)
                 && (String.length parentPath == 2)
+
+        parentPath : String
+        parentPath =
+            parentDir model path
     in
     if parentIsRootDir then
         file
@@ -1111,6 +1119,9 @@ processMainShortcuts model target event =
 
             ( Key.U, False ) ->
                 undo model
+
+            ( Key.W, False ) ->
+                selectSimilarFiles model target
 
             ( Key.Left, _ ) ->
                 goBack model target
@@ -1289,6 +1300,20 @@ restoreFocus model =
     )
 
 
+selectSimilarFiles : Model -> Target -> ( Model, Cmd Msg )
+selectSimilarFiles model target =
+    case target of
+        Source ->
+            ( { model | sourceFiles = selectSimilar model.similarityLevel model.sourceFiles }, Cmd.none )
+
+        Destination ->
+            ( { model | destinationFiles = selectSimilar model.similarityLevel model.destinationFiles }, Cmd.none )
+
+
+
+-- VIEW
+
+
 showDirNameEditor : Model -> Target -> ( Model, Cmd Msg )
 showDirNameEditor model target =
     case target of
@@ -1301,10 +1326,6 @@ showDirNameEditor model target =
               }
             , focusOn "dirname-input" NoOp
             )
-
-
-
--- VIEW
 
 
 simpleKeyDecoder : Target -> Json.Decode.Decoder Msg
@@ -2454,8 +2475,3 @@ viewSourceSubdirectories model =
                 |> List.map (viewDirectory model (UserClickedSourceDirectory False))
             )
         ]
-
-
-windowsPathSep : String
-windowsPathSep =
-    "\\"

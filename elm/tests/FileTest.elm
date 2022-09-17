@@ -1,8 +1,8 @@
 module FileTest exposing (suite)
 
 import Expect
-import File exposing (File, FileStatus(..), extendSelectionToNext, extendSelectionToPrevious, selectNext, selectPrevious, withStatus)
-import Fixtures exposing (filteredDir1, filteredDir2, filteredDir3, filteredDir4, filteredDir5)
+import File exposing (File, FileStatus(..), extendSelectionToNext, extendSelectionToPrevious, selectNext, selectPrevious, selectSimilar, withStatus)
+import Fixtures exposing (filteredDir1, filteredDir2, filteredDir3, filteredDir4, filteredDir5, filteredDir6, filteredDir7, filteredDir8)
 import Test exposing (Test, describe, test)
 
 
@@ -176,6 +176,36 @@ suite =
                         [ filteredDir1
                         , filteredDir2 |> withStatus Selected
                         , filteredDir3 |> withStatus Selected
+                        , filteredDir4
+                        , filteredDir5
+                        ]
+                in
+                Expect.equal expected actual
+        , test "selectSimilar selects the files with a name stringly looking like the given one" <|
+            \_ ->
+                let
+                    actual : List File
+                    actual =
+                        selectSimilar
+                            0.8
+                            [ filteredDir1
+                            , filteredDir6 |> withStatus Selected
+                            , filteredDir2
+                            , filteredDir7
+                            , filteredDir3
+                            , filteredDir8
+                            , filteredDir4 |> withStatus Selected
+                            , filteredDir5
+                            ]
+
+                    expected : List File
+                    expected =
+                        [ filteredDir1
+                        , filteredDir6 |> withStatus Selected
+                        , filteredDir2
+                        , filteredDir7 |> withStatus Selected
+                        , filteredDir3
+                        , filteredDir8 |> withStatus Selected
                         , filteredDir4
                         , filteredDir5
                         ]
