@@ -271,17 +271,11 @@ footer {
   margin:  0 2px 0 10px;
 }
 
-.search-form:not(:hover) > input {
-  width: 100px;
-  transition-duration: 0.5s;
-  transition-delay: 0.5s;
-}
-.search-form:hover > input {
-  width: 160px;
-  transition-duration: 0.3s;
+.search-form > input {
+  width: 140px;
 }
 
-.search-form > .btn {
+.search-form > button {
   margin: 0;
 }
 
