@@ -14,4 +14,4 @@ test:
 	cd elm; elm-test
 
 review:
-	cd elm; node_modules/elm-review/bin/elm-review --fix
+	cd elm; elm-review --fix
