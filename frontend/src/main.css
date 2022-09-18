@@ -292,3 +292,7 @@ footer {
   text-decoration: underline;
 
 }
+
+#similarity-level {
+    width: 50px;
+}

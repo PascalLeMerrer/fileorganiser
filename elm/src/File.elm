@@ -119,10 +119,13 @@ selectSimilar level files =
         firstSelectedFile : Maybe File
         firstSelectedFile =
             List.Extra.find (\f -> f.status == Selected) files
+
+        similarityLevel =
+            level / 10
     in
     case firstSelectedFile of
         Just file ->
-            List.map (selectIfSimilar file.name level) files
+            List.map (selectIfSimilar file.name similarityLevel) files
 
         Nothing ->
             files

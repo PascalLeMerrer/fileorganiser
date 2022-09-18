@@ -125,6 +125,7 @@ type FocusedZone
     | DirNameEditor
     | RightSide
     | SourceSearchReplace
+    | SimilarityLevel
 
 
 type alias Model =
@@ -177,6 +178,7 @@ type Msg
     | NoOp
     | UserChangedDestinationDirectoryFilter String
     | UserChangedDestinationFilesFilter String
+    | UserChangedSimilarityLevel String
     | UserChangedSourceFilter String
     | UserChangedSourceReplace String
     | UserChangedSourceSearch String
@@ -232,7 +234,7 @@ defaultModel =
     , isUndoing = False
     , previousFocusedZone = LeftSide
     , pathSeparator = unixPathSep
-    , similarityLevel = 0.8
+    , similarityLevel = 8
     , sourceDirectoryPath = "."
     , sourceFiles = []
     , sourceFilter = ""
@@ -1293,6 +1295,9 @@ restoreFocus model =
             RightSide ->
                 "container-right"
 
+            SimilarityLevel ->
+                "similarity-level"
+
             SourceSearchReplace ->
                 "search-left"
         )
@@ -1916,6 +1921,17 @@ update msg model =
                 _ ->
                     ( model, Cmd.none )
 
+        UserChangedSimilarityLevel inputValue ->
+            let
+                similarityLevel =
+                    inputValue
+                        |> String.toFloat
+                        |> Debug.log "similarityLevel before withDefault"
+                        |> Maybe.withDefault model.similarityLevel
+                        |> Debug.log "similarityLevel after withDefault"
+            in
+            selectSimilarFiles { model | similarityLevel = similarityLevel } Source
+
 
 view : Model -> Html Msg
 view model =
@@ -2396,32 +2412,8 @@ viewSourceFiles model =
     div [ class "panel" ]
         [ div [ class <| "panel-header" ++ additionalHeaderClass model LeftSide ]
             [ h2 [] [ text <| fileCount model Source ]
-            , div [ class "search-form" ]
-                [ input
-                    [ class "input"
-                    , id "search-left"
-                    , onFocus (UserChangedFocusedZone SourceSearchReplace)
-                    , onInput UserChangedSourceSearch
-                    , placeholder "Search"
-                    , type_ "text"
-                    , value model.sourceSearch
-                    ]
-                    []
-                , input
-                    [ class "input"
-                    , onFocus (UserChangedFocusedZone SourceSearchReplace)
-                    , onInput UserChangedSourceReplace
-                    , placeholder "Replace with"
-                    , type_ "text"
-                    , value model.sourceReplace
-                    ]
-                    []
-                , button
-                    [ class "btn"
-                    , onClick UserClickedReplaceButton
-                    ]
-                    [ text "Replace" ]
-                ]
+            , viewSimilarityLevelForm model
+            , viewSearchReplaceForm model
             ]
         , div
             [ class "input-box"
@@ -2445,6 +2437,50 @@ viewSourceFiles model =
                 |> List.filter .satisfiesFilter
                 |> List.map (viewFile model UserClickedSourceFile True)
             )
+        ]
+
+
+viewSimilarityLevelForm : Model -> Html Msg
+viewSimilarityLevelForm model =
+    input
+        [ class "input"
+        , id "similarity-level"
+        , onFocus (UserChangedFocusedZone SimilarityLevel)
+        , onInput UserChangedSimilarityLevel
+        , placeholder "Search"
+        , type_ "text"
+        , value <| String.fromFloat model.similarityLevel
+        ]
+        []
+
+
+viewSearchReplaceForm : Model -> Html Msg
+viewSearchReplaceForm model =
+    div [ class "search-form" ]
+        [ input
+            [ class "input"
+            , id "search-left"
+            , onFocus (UserChangedFocusedZone SourceSearchReplace)
+            , onInput UserChangedSourceSearch
+            , placeholder "Search"
+            , type_ "text"
+            , value model.sourceSearch
+            ]
+            []
+        , input
+            [ class "input"
+            , onFocus (UserChangedFocusedZone SourceSearchReplace)
+            , onInput UserChangedSourceReplace
+            , placeholder "Replace with"
+            , type_ "text"
+            , value model.sourceReplace
+            ]
+            []
+        , button
+            [ class "btn"
+            , onClick UserClickedReplaceButton
+            ]
+            [ text "Replace" ]
         ]
 
 
