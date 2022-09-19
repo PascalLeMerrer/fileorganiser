@@ -187,7 +187,8 @@ suite =
                     actual : List File
                     actual =
                         selectSimilar
-                            0.8
+                            filteredDir6
+                            8
                             [ filteredDir1
                             , filteredDir6 |> withStatus Selected
                             , filteredDir2

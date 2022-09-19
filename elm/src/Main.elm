@@ -14,6 +14,7 @@ import Keyboard.Key as Key
 import List.Extra
 import Pattern
 import Regex
+import SingleSlider
 import String.Mark as Mark exposing (defaultOptions, multiWord)
 import Task
 import Time exposing (Month(..))
@@ -150,6 +151,7 @@ type alias Model =
     , isUndoing : Bool
     , previousFocusedZone : FocusedZone
     , pathSeparator : String
+    , referenceFile : Maybe File -- for search by similarity of name
     , similarityLevel : Float
     , sourceDirectoryPath : String
     , sourceFiles : List File
@@ -178,7 +180,7 @@ type Msg
     | NoOp
     | UserChangedDestinationDirectoryFilter String
     | UserChangedDestinationFilesFilter String
-    | UserChangedSimilarityLevel String
+    | UserChangedSimilarityLevel Float
     | UserChangedSourceFilter String
     | UserChangedSourceReplace String
     | UserChangedSourceSearch String
@@ -234,6 +236,7 @@ defaultModel =
     , isUndoing = False
     , previousFocusedZone = LeftSide
     , pathSeparator = unixPathSep
+    , referenceFile = Nothing
     , similarityLevel = 8
     , sourceDirectoryPath = "."
     , sourceFiles = []
@@ -1123,7 +1126,20 @@ processMainShortcuts model target event =
                 undo model
 
             ( Key.W, False ) ->
-                selectSimilarFiles model target
+                let
+                    files =
+                        case target of
+                            Source ->
+                                model.sourceFiles
+
+                            Destination ->
+                                model.destinationFiles
+
+                    firstSelectedFile : Maybe File
+                    firstSelectedFile =
+                        List.Extra.find (\f -> f.status == Selected) files
+                in
+                selectSimilarFiles { model | referenceFile = firstSelectedFile } target
 
             ( Key.Left, _ ) ->
                 goBack model target
@@ -1307,12 +1323,15 @@ restoreFocus model =
 
 selectSimilarFiles : Model -> Target -> ( Model, Cmd Msg )
 selectSimilarFiles model target =
-    case target of
-        Source ->
-            ( { model | sourceFiles = selectSimilar model.similarityLevel model.sourceFiles }, Cmd.none )
+    case ( model.referenceFile, target ) of
+        ( Just file, Source ) ->
+            ( { model | sourceFiles = selectSimilar file model.similarityLevel model.sourceFiles }, Cmd.none )
 
-        Destination ->
-            ( { model | destinationFiles = selectSimilar model.similarityLevel model.destinationFiles }, Cmd.none )
+        ( Just file, Destination ) ->
+            ( { model | destinationFiles = selectSimilar file model.similarityLevel model.destinationFiles }, Cmd.none )
+
+        ( Nothing, _ ) ->
+            ( model, Cmd.none )
 
 
 
@@ -1921,16 +1940,8 @@ update msg model =
                 _ ->
                     ( model, Cmd.none )
 
-        UserChangedSimilarityLevel inputValue ->
-            let
-                similarityLevel =
-                    inputValue
-                        |> String.toFloat
-                        |> Debug.log "similarityLevel before withDefault"
-                        |> Maybe.withDefault model.similarityLevel
-                        |> Debug.log "similarityLevel after withDefault"
-            in
-            selectSimilarFiles { model | similarityLevel = similarityLevel } Source
+        UserChangedSimilarityLevel similarityLevel ->
+            selectSimilarFiles { model | similarityLevel = Debug.log "similarityLevel" similarityLevel } Source
 
 
 view : Model -> Html Msg
@@ -2442,16 +2453,31 @@ viewSourceFiles model =
 
 viewSimilarityLevelForm : Model -> Html Msg
 viewSimilarityLevelForm model =
-    input
-        [ class "input"
-        , id "similarity-level"
-        , onFocus (UserChangedFocusedZone SimilarityLevel)
-        , onInput UserChangedSimilarityLevel
-        , placeholder "Search"
-        , type_ "text"
-        , value <| String.fromFloat model.similarityLevel
-        ]
-        []
+    --div []
+    --    [
+    --input
+    --    [ class "input"
+    --    , id "similarity-level"
+    --    , onFocus (UserChangedFocusedZone SimilarityLevel)
+    --    , onInput UserChangedSimilarityLevel
+    --    , placeholder "Search"
+    --    , type_ "text"
+    --    , value <| String.fromFloat model.similarityLevel
+    --    ]
+    --    []
+    --,
+    SingleSlider.view <|
+        SingleSlider.init
+            { min = 0
+            , max = 100
+            , value = model.similarityLevel
+            , step = 1
+            , onChange = UserChangedSimilarityLevel
+            }
+
+
+
+--]
 
 
 viewSearchReplaceForm : Model -> Html Msg

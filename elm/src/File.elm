@@ -113,22 +113,13 @@ selectPrevious files =
 {- selects files whose name have a high level of similarity -}
 
 
-selectSimilar : Float -> List File -> List File
-selectSimilar level files =
+selectSimilar : File -> Float -> List File -> List File
+selectSimilar referenceFile level files =
     let
-        firstSelectedFile : Maybe File
-        firstSelectedFile =
-            List.Extra.find (\f -> f.status == Selected) files
-
         similarityLevel =
             level / 10
     in
-    case firstSelectedFile of
-        Just file ->
-            List.map (selectIfSimilar file.name similarityLevel) files
-
-        Nothing ->
-            files
+    List.map (selectIfSimilar referenceFile similarityLevel) files
 
 
 toggleSelectionStatus : File -> File
@@ -206,9 +197,12 @@ selectFirst files =
     List.Extra.updateAt 0 (\f -> { f | status = Selected }) files
 
 
-selectIfSimilar : String -> Float -> File -> File
-selectIfSimilar referenceName level file =
-    if JaroWinkler.similarity referenceName file.name >= level then
+selectIfSimilar : File -> Float -> File -> File
+selectIfSimilar referenceFile level file =
+    if
+        (file == referenceFile)
+            || (JaroWinkler.similarity referenceFile.name file.name >= level)
+    then
         { file | status = Selected }
 
     else
