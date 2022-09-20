@@ -188,7 +188,7 @@ suite =
                     actual =
                         selectSimilar
                             filteredDir6
-                            8
+                            10
                             [ filteredDir1
                             , filteredDir6 |> withStatus Selected
                             , filteredDir2

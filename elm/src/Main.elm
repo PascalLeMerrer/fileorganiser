@@ -152,7 +152,7 @@ type alias Model =
     , previousFocusedZone : FocusedZone
     , pathSeparator : String
     , referenceFile : Maybe File -- for search by similarity of name
-    , similarityLevel : Float
+    , distance : Int
     , sourceDirectoryPath : String
     , sourceFiles : List File
     , sourceFilter : String
@@ -180,7 +180,7 @@ type Msg
     | NoOp
     | UserChangedDestinationDirectoryFilter String
     | UserChangedDestinationFilesFilter String
-    | UserChangedSimilarityLevel Float
+    | UserChangedMaxDistance Float
     | UserChangedSourceFilter String
     | UserChangedSourceReplace String
     | UserChangedSourceSearch String
@@ -237,7 +237,7 @@ defaultModel =
     , previousFocusedZone = LeftSide
     , pathSeparator = unixPathSep
     , referenceFile = Nothing
-    , similarityLevel = 8
+    , distance = 8
     , sourceDirectoryPath = "."
     , sourceFiles = []
     , sourceFilter = ""
@@ -1325,10 +1325,10 @@ selectSimilarFiles : Model -> Target -> ( Model, Cmd Msg )
 selectSimilarFiles model target =
     case ( model.referenceFile, target ) of
         ( Just file, Source ) ->
-            ( { model | sourceFiles = selectSimilar file model.similarityLevel model.sourceFiles }, Cmd.none )
+            ( { model | sourceFiles = selectSimilar file model.distance model.sourceFiles }, Cmd.none )
 
         ( Just file, Destination ) ->
-            ( { model | destinationFiles = selectSimilar file model.similarityLevel model.destinationFiles }, Cmd.none )
+            ( { model | destinationFiles = selectSimilar file model.distance model.destinationFiles }, Cmd.none )
 
         ( Nothing, _ ) ->
             ( model, Cmd.none )
@@ -1940,8 +1940,8 @@ update msg model =
                 _ ->
                     ( model, Cmd.none )
 
-        UserChangedSimilarityLevel similarityLevel ->
-            selectSimilarFiles { model | similarityLevel = Debug.log "similarityLevel" similarityLevel } Source
+        UserChangedMaxDistance maxDistance ->
+            selectSimilarFiles { model | distance = Debug.log "maxDistance" <| round maxDistance } Source
 
 
 view : Model -> Html Msg
@@ -2470,9 +2470,9 @@ viewSimilarityLevelForm model =
         SingleSlider.init
             { min = 0
             , max = 100
-            , value = model.similarityLevel
+            , value = toFloat model.distance
             , step = 1
-            , onChange = UserChangedSimilarityLevel
+            , onChange = UserChangedMaxDistance
             }
 
 

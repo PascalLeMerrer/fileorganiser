@@ -4,6 +4,7 @@ import Iso8601
 import JaroWinkler
 import Json.Decode exposing (Decoder)
 import Json.Decode.Pipeline exposing (hardcoded, required)
+import Levenshtein
 import List.Extra
 import Time exposing (Posix, millisToPosix)
 
@@ -113,13 +114,9 @@ selectPrevious files =
 {- selects files whose name have a high level of similarity -}
 
 
-selectSimilar : File -> Float -> List File -> List File
-selectSimilar referenceFile level files =
-    let
-        similarityLevel =
-            level / 10
-    in
-    List.map (selectIfSimilar referenceFile similarityLevel) files
+selectSimilar : File -> Int -> List File -> List File
+selectSimilar referenceFile maxDistance files =
+    List.map (selectIfSimilar referenceFile maxDistance) files
 
 
 toggleSelectionStatus : File -> File
@@ -197,11 +194,11 @@ selectFirst files =
     List.Extra.updateAt 0 (\f -> { f | status = Selected }) files
 
 
-selectIfSimilar : File -> Float -> File -> File
-selectIfSimilar referenceFile level file =
+selectIfSimilar : File -> Int -> File -> File
+selectIfSimilar referenceFile maxDistance file =
     if
         (file == referenceFile)
-            || (JaroWinkler.similarity referenceFile.name file.name >= level)
+            || (Levenshtein.distance referenceFile.name file.name <= maxDistance)
     then
         { file | status = Selected }
 
