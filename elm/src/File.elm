@@ -1,11 +1,10 @@
 module File exposing (File, FileStatus(..), defaultDir, extendSelectionToNext, extendSelectionToPrevious, fileDecoder, selectNext, selectPrevious, selectSimilar, toggleSelectionStatus, withName, withParentPath, withStatus)
 
 import Iso8601
-import JaroWinkler
 import Json.Decode exposing (Decoder)
 import Json.Decode.Pipeline exposing (hardcoded, required)
-import Levenshtein
 import List.Extra
+import StringComparison exposing (isSimilarityLevelGreaterThan)
 import Time exposing (Posix, millisToPosix)
 
 
@@ -115,8 +114,8 @@ selectPrevious files =
 
 
 selectSimilar : File -> Int -> List File -> List File
-selectSimilar referenceFile maxDistance files =
-    List.map (selectIfSimilar referenceFile maxDistance) files
+selectSimilar referenceFile minSimilarity files =
+    List.map (selectIfSimilar referenceFile minSimilarity) files
 
 
 toggleSelectionStatus : File -> File
@@ -195,10 +194,10 @@ selectFirst files =
 
 
 selectIfSimilar : File -> Int -> File -> File
-selectIfSimilar referenceFile maxDistance file =
+selectIfSimilar referenceFile minSimilarity file =
     if
         (file == referenceFile)
-            || (Levenshtein.distance referenceFile.name file.name <= maxDistance)
+            || isSimilarityLevelGreaterThan referenceFile.name file.name minSimilarity
     then
         { file | status = Selected }
 

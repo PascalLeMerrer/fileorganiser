@@ -152,7 +152,7 @@ type alias Model =
     , previousFocusedZone : FocusedZone
     , pathSeparator : String
     , referenceFile : Maybe File -- for search by similarity of name
-    , distance : Int
+    , minSimilarity : Int
     , sourceDirectoryPath : String
     , sourceFiles : List File
     , sourceFilter : String
@@ -237,7 +237,7 @@ defaultModel =
     , previousFocusedZone = LeftSide
     , pathSeparator = unixPathSep
     , referenceFile = Nothing
-    , distance = 8
+    , minSimilarity = 8
     , sourceDirectoryPath = "."
     , sourceFiles = []
     , sourceFilter = ""
@@ -1325,10 +1325,10 @@ selectSimilarFiles : Model -> Target -> ( Model, Cmd Msg )
 selectSimilarFiles model target =
     case ( model.referenceFile, target ) of
         ( Just file, Source ) ->
-            ( { model | sourceFiles = selectSimilar file model.distance model.sourceFiles }, Cmd.none )
+            ( { model | sourceFiles = selectSimilar file model.minSimilarity model.sourceFiles }, Cmd.none )
 
         ( Just file, Destination ) ->
-            ( { model | destinationFiles = selectSimilar file model.distance model.destinationFiles }, Cmd.none )
+            ( { model | destinationFiles = selectSimilar file model.minSimilarity model.destinationFiles }, Cmd.none )
 
         ( Nothing, _ ) ->
             ( model, Cmd.none )
@@ -1941,7 +1941,7 @@ update msg model =
                     ( model, Cmd.none )
 
         UserChangedMaxDistance maxDistance ->
-            selectSimilarFiles { model | distance = Debug.log "maxDistance" <| round maxDistance } Source
+            selectSimilarFiles { model | minSimilarity = Debug.log "maxDistance" <| round maxDistance } Source
 
 
 view : Model -> Html Msg
@@ -2469,8 +2469,8 @@ viewSimilarityLevelForm model =
     SingleSlider.view <|
         SingleSlider.init
             { min = 0
-            , max = 100
-            , value = toFloat model.distance
+            , max = 30
+            , value = toFloat model.minSimilarity
             , step = 1
             , onChange = UserChangedMaxDistance
             }
