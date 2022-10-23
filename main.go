@@ -24,9 +24,9 @@ func main() {
 	// Create application with options
 	err := wails.Run(&options.App{
 		Title:             "File Organizer",
-		Width:             1280,
-		Height:            768,
-		MinWidth:          1280,
+		Width:             1440,
+		Height:            800,
+		MinWidth:          1440,
 		MinHeight:         768,
 		MaxWidth:          2560,
 		MaxHeight:         1600,
