@@ -614,6 +614,12 @@ fileCount model target =
         totalCount : Int
         totalCount =
             List.length model.sourceFiles
+            case target of
+                Source ->
+                    List.length model.sourceFiles
+
+                Destination ->
+                    List.length model.destinationFiles
     in
     if filteredCount == totalCount then
         String.fromInt filteredCount
