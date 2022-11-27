@@ -129,7 +129,11 @@ form {
   word-break: break-all;
 }
 
-.file { background: ghostwhite; }
+.file {
+    background: ghostwhite;
+    cursor: pointer;
+}
+
 .file:nth-child(odd) { background: #DDD; }
 
 .file.selected {
