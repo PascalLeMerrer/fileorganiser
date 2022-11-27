@@ -2415,16 +2415,16 @@ viewReadOnlyFile model onClickMsg canBeSearchedAndReplaced file =
         className =
             case file.status of
                 Unselected ->
-                    "filename"
+                    "file"
 
                 Edited ->
-                    "filename"
+                    "file"
 
                 Selected ->
-                    "filename selected"
+                    "file selected"
 
                 SelectedForDeletion ->
-                    "filename marked-for-deletion"
+                    "file marked-for-deletion"
 
         fileName : List (Html Msg)
         fileName =
@@ -2445,10 +2445,10 @@ viewReadOnlyFile model onClickMsg canBeSearchedAndReplaced file =
                 [ text file.name ]
     in
     div
-        [ class "file"
+        [ class className
         , onClick (onClickMsg file)
         ]
-        [ div [ class className ] fileName
+        [ div [ class "filename" ] fileName
         , div [] [ text <| Filesize.format file.size ]
         , div [ class "filemodificationdate" ] [ viewDate model file.modTime ]
         ]
