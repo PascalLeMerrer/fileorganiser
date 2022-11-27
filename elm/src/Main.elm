@@ -4,7 +4,7 @@ import Browser
 import Browser.Dom
 import File exposing (File, FileStatus(..), defaultDir, extendSelectionToNext, extendSelectionToPrevious, fileDecoder, selectNext, selectPrevious, selectSimilar, toggleSelectionStatus, withName, withParentPath, withStatus)
 import Filesize
-import Html exposing (Html, button, div, footer, form, h2, input, span, text)
+import Html exposing (Html, button, div, footer, form, h2, input, li, span, text, ul)
 import Html.Attributes exposing (class, disabled, id, placeholder, tabindex, type_, value)
 import Html.Events as Events exposing (onClick, onFocus, onInput, onSubmit)
 import Json.Decode exposing (list)
@@ -132,6 +132,7 @@ type FocusedZone
 type alias Model =
     { applySourceFilterToDestinationDirectories : Bool
     , applySourceFilterToDestinationFiles : Bool
+    , debug : List String
     , destinationDirectoryPath : String
     , destinationDirectoryFilter : String
     , destinationFiles : List File
@@ -146,6 +147,9 @@ type alias Model =
     , focusedZone : FocusedZone
     , history : List (List Command)
     , isCreatingDirectory : Bool
+    , isDebugVisible : Bool
+    , isDestinationLoadingInProgress : Bool
+    , isSourceLoadingInProgress : Bool
     , isShiftPressed : Bool
     , isControlPressed : Bool
     , isUndoing : Bool
@@ -217,6 +221,7 @@ defaultModel : Model
 defaultModel =
     { applySourceFilterToDestinationDirectories = False
     , applySourceFilterToDestinationFiles = False
+    , debug = []
     , destinationDirectoryPath = ""
     , destinationDirectoryFilter = ""
     , destinationFiles = []
@@ -231,8 +236,11 @@ defaultModel =
     , focusedZone = LeftSide
     , history = []
     , isCreatingDirectory = False
+    , isDebugVisible = False
     , isShiftPressed = False
     , isControlPressed = False
+    , isDestinationLoadingInProgress = True
+    , isSourceLoadingInProgress = True
     , isUndoing = False
     , previousFocusedZone = LeftSide
     , pathSeparator = unixPathSep
@@ -475,6 +483,8 @@ changeDestinationDirectory path model =
     { model
         | destinationDirectoryPath = path
         , destinationNavigationHistory = model.destinationDirectoryPath :: model.destinationNavigationHistory
+        , isDestinationLoadingInProgress = True
+        , isSourceLoadingInProgress = True
     }
 
 
@@ -483,6 +493,7 @@ changeSourceDirectory path model =
     { model
         | sourceDirectoryPath = path
         , sourceNavigationHistory = model.sourceDirectoryPath :: model.sourceNavigationHistory
+        , isSourceLoadingInProgress = True
     }
 
 
@@ -613,7 +624,6 @@ fileCount model target =
 
         totalCount : Int
         totalCount =
-            List.length model.sourceFiles
             case target of
                 Source ->
                     List.length model.sourceFiles
@@ -984,8 +994,12 @@ pathElementsRecursive model acc path =
             parentDir model path
     in
     if parentIsRootDir then
-        file
-            :: acc
+        case parentPath of
+            "" ->
+                { file | parentPath = unixPathSep } :: acc
+
+            _ ->
+                file :: acc
 
     else
         file
@@ -1113,6 +1127,9 @@ processMainShortcuts model target event =
 
     else
         case ( event.keyCode, event.shiftKey ) of
+            ( Key.D, False ) ->
+                ( { model | isDebugVisible = not model.isDebugVisible }, Cmd.none )
+
             ( Key.F, False ) ->
                 openSelectedFolder model target
 
@@ -1483,7 +1500,11 @@ unmarkFilesForDeletion model =
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
-update msg model =
+update msg mymodel =
+    let
+        model =
+            { mymodel | debug = Debug.toString msg :: mymodel.debug |> List.take 9 }
+    in
     case msg of
         AdjustTimeZone newZone ->
             ( { model | timezone = newZone }
@@ -1533,7 +1554,10 @@ update msg model =
             )
 
         BackendReturnedDestinationDirectories files ->
-            ( { model | destinationSubdirectories = files |> sortByName }
+            ( { model
+                | destinationSubdirectories = files |> sortByName
+                , isDestinationLoadingInProgress = False
+              }
                 |> filterDestinationDirectories
             , Cmd.none
             )
@@ -1691,6 +1715,7 @@ update msg model =
             ( { model
                 | sourceFiles = fileList |> sortByName
                 , sourceSubDirectories = dirList |> sortByName
+                , isSourceLoadingInProgress = False
               }
                 |> filterSourceFiles
             , Cmd.none
@@ -1794,9 +1819,14 @@ update msg model =
             let
                 newDestinationPath : String
                 newDestinationPath =
-                    case ( isAbsolute, file.name ) of
+                    case ( Debug.log "isAbsolute" isAbsolute, Debug.log "file.name" file.name ) of
                         ( True, _ ) ->
-                            file.parentPath ++ model.pathSeparator ++ file.name
+                            if file.parentPath == unixPathSep then
+                                -- parent is root dir on Mac, prevent bad path name like //Users
+                                model.pathSeparator ++ file.name
+
+                            else
+                                file.parentPath ++ model.pathSeparator ++ file.name
 
                         ( False, ".." ) ->
                             parentDir model model.destinationDirectoryPath
@@ -1812,7 +1842,9 @@ update msg model =
             )
 
         UserClickedDestinationDirectoryButton ->
-            ( model, selectDestinationDirectory model.destinationDirectoryPath )
+            ( model
+            , selectDestinationDirectory model.destinationDirectoryPath
+            )
 
         UserClickedDestinationFile file ->
             let
@@ -1844,7 +1876,12 @@ update msg model =
                 newSourcePath =
                     case ( isAbsolute, file.name ) of
                         ( True, _ ) ->
-                            file.parentPath ++ model.pathSeparator ++ file.name
+                            if file.parentPath == unixPathSep then
+                                -- parent is root dir on Mac, prevent bad path name like //Users
+                                model.pathSeparator ++ file.name
+
+                            else
+                                file.parentPath ++ model.pathSeparator ++ file.name
 
                         ( False, ".." ) ->
                             parentDir model model.sourceDirectoryPath
@@ -1947,13 +1984,18 @@ update msg model =
                     ( model, Cmd.none )
 
         UserChangedMaxDistance maxDistance ->
-            selectSimilarFiles { model | minSimilarity = Debug.log "maxDistance" <| round maxDistance } Source
+            selectSimilarFiles { model | minSimilarity = round maxDistance } Source
 
 
 view : Model -> Html Msg
 view model =
     div
-        [ class "app"
+        [ class <|
+            if model.isDebugVisible then
+                "app debug"
+
+            else
+                "app"
         , id "app"
         , Events.on "keydown" keyDecoder
         , Events.on "keyup" keyDecoder
@@ -2025,9 +2067,13 @@ viewDate model time =
 
 viewDestination : Model -> List (Html Msg)
 viewDestination model =
-    [ viewDestinationSubdirectories model
-    , viewDestinationFiles model
-    ]
+    if model.isDestinationLoadingInProgress then
+        [ viewLoadingAnimation ]
+
+    else
+        [ viewDestinationSubdirectories model
+        , viewDestinationFiles model
+        ]
 
 
 viewDestinationDirectoryFilter : Model -> Html Msg
@@ -2235,7 +2281,21 @@ viewFooter model =
                     , button [ class "btn", onClick UserClickedCancel ] [ text "Cancel" ]
                     , button [ class "btn", onClick UserClickedDelete, id "delete-button" ] [ text "DELETE" ]
                     ]
+        , viewDebug model
         ]
+
+
+viewDebug : Model -> Html Msg
+viewDebug model =
+    if model.isDebugVisible then
+        ul [ class "debug" ]
+            ([ li [] [ text <| "destinationDirectoryPath: " ++ model.destinationDirectoryPath ]
+             ]
+                ++ List.map (\msg -> li [] [ text <| "Msg: " ++ String.left 220 msg ]) model.debug
+            )
+
+    else
+        text ""
 
 
 viewLeftSide : Model -> Html Msg
@@ -2543,3 +2603,8 @@ viewSourceSubdirectories model =
                 |> List.map (viewDirectory model (UserClickedSourceDirectory False))
             )
         ]
+
+
+viewLoadingAnimation : Html Msg
+viewLoadingAnimation =
+    div [ class "spin" ] []

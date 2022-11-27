@@ -65,7 +65,7 @@ suite =
                             expected =
                                 [ defaultDir
                                     |> withName "some"
-                                    |> withParentPath ""
+                                    |> withParentPath "/"
                                 , defaultDir
                                     |> withName "path"
                                     |> withParentPath "/some"

@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"time"
@@ -88,12 +90,15 @@ func (a *App) GetDirectoryContent(dirName string) ([]FileInfo, error) {
 		return nil, err
 	}
 
-	parentDirFileInfo, err := getParentDirectory(dirName)
-	if err != nil {
-		return nil, err
-	}
 	result := []FileInfo{}
-	result = append(result, parentDirFileInfo)
+
+    if dirName != root() {
+        parentDirFileInfo, err := getParentDirectory(dirName)
+        if err == nil {
+            result = append(result, parentDirFileInfo)
+        }
+    }
+
 
     for _, entry := range fileList {
     	isHidden, _ := isHidden(entry.Name(), dirName)
@@ -119,6 +124,7 @@ func (a *App) GetDirectoryFiles(dirName string) ([]FileInfo, error) {
 	dir, err := os.Open(dirName)
 
 	if err != nil {
+	    fmt.Printf("%s\n", err)
 		return nil, err
 	}
 
@@ -127,6 +133,7 @@ func (a *App) GetDirectoryFiles(dirName string) ([]FileInfo, error) {
 	fileList, err := dir.Readdir(0)
 
 	if err != nil {
+	    fmt.Printf("%s\n", err)
 		return nil, err
 	}
 
@@ -134,8 +141,10 @@ func (a *App) GetDirectoryFiles(dirName string) ([]FileInfo, error) {
 
     for _, entry := range fileList {
     	isHidden, _ := isHidden(entry.Name(), dirName)
+    	//fmt.Printf("Name: %s - Parent Dir: %s \n", entry.Name(), dirName)
+    	//if isHidden || entry.IsDir() || entry.Name() == ".." && dirName == root() {
     	if isHidden || entry.IsDir() {
-    		continue
+    	    continue
     	}
 
         f := FileInfo{
@@ -153,32 +162,42 @@ func (a *App) GetDirectoryFiles(dirName string) ([]FileInfo, error) {
 }
 
 func (a *App) GetSubdirectoriesRecursively(dirName string) ([]FileInfo, error) {
-	parentDirFileInfo, err := getParentDirectory(dirName)
 	result := []FileInfo{}
-	if err == nil {
-		result = append(result, parentDirFileInfo)
+	if dirName != root() {
+        parentDirFileInfo, err := getParentDirectory(dirName)
+        if err == nil {
+            result = append(result, parentDirFileInfo)
+        }
 	}
 
-	err = filepath.Walk(dirName,
-	    func(path string, info os.FileInfo, err error) error {
+	err := filepath.WalkDir(dirName,
+	    func(path string, dirEntry fs.DirEntry, err error) error {
+
 		    if err != nil {
 		        return nil // ignore the file
 		    }
+	        if len(result) >= 3000 {
+	             return nil
+	        }
 		    relativePath, err := filepath.Rel(dirName, path)
+
 			if err != nil {
 		        return nil // ignore the file
 		    }
+            fileInfo, err := dirEntry.Info()
+	    	if err != nil || !fileInfo.IsDir() { return nil }
+
 		    isHidden, _ := isHidden(relativePath, dirName)
-	    	if info.IsDir() && ! isHidden {
-		        f := FileInfo{
-		            Name:    relativePath,
-		            DirPath: dirName,
-		            Size:    info.Size(),
-		            Mode:    info.Mode(),
-		            ModTime: info.ModTime(),
-		            IsDir:   info.IsDir(),
-		        }
-		        result = append(result, f)
+	    	if !isHidden {
+                f := FileInfo{
+                    Name:    relativePath,
+                    DirPath: dirName,
+                    Size:    fileInfo.Size(),
+                    Mode:    fileInfo.Mode(),
+                    ModTime: fileInfo.ModTime(),
+                    IsDir:   true,
+                }
+                result = append(result, f)
 	    	}
 		    return nil
 		})
@@ -187,8 +206,15 @@ func (a *App) GetSubdirectoriesRecursively(dirName string) ([]FileInfo, error) {
 
 func getParentDirectory(absolutePath string) (FileInfo, error) {
 
+
 	parentDir := filepath.Dir(absolutePath)
+
+	if parentDir == root() {
+        return FileInfo{}, errors.New("Current dir is root")
+	}
+
 	info, err := os.Stat(parentDir)
+
 	if err != nil {
 		return FileInfo{}, err
 	}
@@ -202,6 +228,11 @@ func getParentDirectory(absolutePath string) (FileInfo, error) {
         IsDir:   true,
     }
     return f, nil
+}
+
+// TODO store root in a variable
+func root() string {
+   return os.Getenv("SystemDrive") + string(os.PathSeparator)
 }
 
 func (a *App) SelectDirectory(defaultDirectory string, title string) (string, error) {
@@ -284,7 +315,6 @@ func (a *App) Remove(filePath string) (FileInfo, error) {
 
 func (a *App) CreateDirectory(dirPath string) (FileInfo, error) {
 
-	fmt.Println("CreateDirectory: " + dirPath)
     err := os.Mkdir(dirPath, 0755)
     if err != nil {
 		return FileInfo{}, err
