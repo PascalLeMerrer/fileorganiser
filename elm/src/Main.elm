@@ -10,7 +10,7 @@ import Html.Events as Events exposing (onClick, onFocus, onInput, onSubmit)
 import Json.Decode exposing (list)
 import Json.Encode
 import Keyboard.Event exposing (KeyboardEvent, decodeKeyboardEvent)
-import Keyboard.Key as Key
+import Keyboard.Key as Key exposing (Key(..))
 import List.Extra
 import Pattern
 import Regex
@@ -1202,11 +1202,28 @@ processMainShortcuts model target event =
             ( Key.Delete, False ) ->
                 prepareSelectedFilesForRemoval model
 
+            ( Key.Add, _ ) ->
+                ( { model | minSimilarity = min (model.minSimilarity + 1) maxSimilarity }, Cmd.none )
+
+            ( Key.Subtract, _ ) ->
+                ( { model | minSimilarity = max (model.minSimilarity + 1) 0 }, Cmd.none )
+
             ( Key.F2, False ) ->
                 renameSelectedSourceFile model
 
             ( Key.F5, False ) ->
                 reload model target
+
+            ( Key.Unknown _, _ ) ->
+                case event.key of
+                    Just "+" ->
+                        ( { model | minSimilarity = min (model.minSimilarity + 1) maxSimilarity }, Cmd.none )
+
+                    Just "-" ->
+                        ( { model | minSimilarity = max (model.minSimilarity - 1) 0 }, Cmd.none )
+
+                    _ ->
+                        ( model, Cmd.none )
 
             _ ->
                 ( model, Cmd.none )
@@ -2517,6 +2534,11 @@ viewSourceFiles model =
         ]
 
 
+maxSimilarity : Int
+maxSimilarity =
+    30
+
+
 viewSimilarityLevelForm : Model -> Html Msg
 viewSimilarityLevelForm model =
     --div []
@@ -2535,7 +2557,7 @@ viewSimilarityLevelForm model =
     SingleSlider.view <|
         SingleSlider.init
             { min = 0
-            , max = 30
+            , max = toFloat maxSimilarity
             , value = toFloat model.minSimilarity
             , step = 1
             , onChange = UserChangedMaxDistance
