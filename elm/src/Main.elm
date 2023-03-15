@@ -868,7 +868,10 @@ moveSelectedFiles model =
                     , model.destinationDirectoryPath
                     )
     in
-    ( model
+    ( { model
+        | isSourceLoadingInProgress = True
+        , isDestinationLoadingInProgress = True
+      }
     , moveFiles ( filesToMove, destination )
     )
 
@@ -1547,10 +1550,10 @@ unmarkFilesForDeletion model =
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
-update msg mymodel =
+update msg myModel =
     let
         model =
-            { mymodel | debug = Debug.toString msg :: mymodel.debug |> List.take 9 }
+            { myModel | debug = Debug.toString msg :: myModel.debug |> List.take 9 }
     in
     case msg of
         AdjustTimeZone newZone ->
@@ -1645,6 +1648,8 @@ update msg mymodel =
             ( { updatedModel
                 | error = Just errorMsg
                 , focusedZone = ErrorMessage
+                , isSourceLoadingInProgress = False
+                , isDestinationLoadingInProgress = False
                 , previousFocusedZone = model.focusedZone
               }
             , Cmd.batch
@@ -1690,6 +1695,8 @@ update msg mymodel =
                           }
                         ]
                             :: model.history
+                    , isSourceLoadingInProgress = False
+                    , isDestinationLoadingInProgress = False
                 }
             , Cmd.batch
                 [ getSourceDirectoryContent model.sourceDirectoryPath
