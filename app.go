@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -250,7 +251,11 @@ func (a *App) Move(sourceFiles []string, destinationDirectory string) ([]FileInf
 		newLocation := filepath.Join(destinationDirectory, filename)
 		err := os.Rename(sourcePath, newLocation)
 		if err != nil {
-			return nil, err
+			// os.Rename does not support moving files between disks 
+			err = MoveFileToOtherDisk(sourcePath, newLocation) 
+			if err != nil {
+				return nil, err
+			}			
 		}
 		info, err := os.Stat(newLocation)
 		if err != nil {
@@ -268,6 +273,32 @@ func (a *App) Move(sourceFiles []string, destinationDirectory string) ([]FileInf
 	}
 	return result, nil
 }
+
+
+func MoveFileToOtherDisk(sourcePath, destPath string) error {
+    inputFile, err := os.Open(sourcePath)
+    if err != nil {
+        return fmt.Errorf("Couldn't open source file: %s", err)
+    }
+    outputFile, err := os.Create(destPath)
+    if err != nil {
+        inputFile.Close()
+        return fmt.Errorf("Couldn't open dest file: %s", err)
+    }
+    defer outputFile.Close()
+    _, err = io.Copy(outputFile, inputFile)
+    inputFile.Close()
+    if err != nil {
+        return fmt.Errorf("Writing to output file failed: %s", err)
+    }
+    // The copy was successful, so now delete the original file
+    err = os.Remove(sourcePath)
+    if err != nil {
+        return fmt.Errorf("Failed removing original file: %s", err)
+    }
+    return nil
+}
+
 
 // Rename one or more files
 func (a *App) Rename(renamings []Renaming) ([]FileInfo, error) {
