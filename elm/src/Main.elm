@@ -1097,7 +1097,7 @@ processMainShortcuts model target event =
                 )
 
             ( Key.R, False ) ->
-                reload model target
+                reload target model
 
             ( Key.Z, False ) ->
                 undo model
@@ -1155,7 +1155,7 @@ processMainShortcuts model target event =
                     firstSelectedFile =
                         List.Extra.find (\f -> f.status == Selected) files
                 in
-                selectSimilarFiles { model | referenceFile = firstSelectedFile } target
+                selectSimilarFiles target { model | referenceFile = firstSelectedFile }
 
             ( Key.Left, _ ) ->
                 goBack model target
@@ -1217,7 +1217,7 @@ processMainShortcuts model target event =
                 renameSelectedSourceFile model
 
             ( Key.F5, False ) ->
-                reload model target
+                reload target model
 
             ( Key.Unknown _, _ ) ->
                 case event.key of
@@ -1234,16 +1234,18 @@ processMainShortcuts model target event =
                 ( model, Cmd.none )
 
 
-reload : Model -> Target -> ( Model, Cmd Msg )
-reload model target =
+reload : Target -> Model -> ( Model, Cmd Msg )
+reload target model =
     case target of
         Source ->
             ( model
+                |> closeFileEditor
             , getSourceDirectoryContent model.sourceDirectoryPath
             )
 
         Destination ->
             ( model
+                |> closeFileEditor
             , Cmd.batch
                 [ getDestinationSubdirectories model.destinationDirectoryPath
                 , getDestinationDirectoryFiles model.destinationDirectoryPath
@@ -1273,10 +1275,6 @@ removeSelectedFiles model =
     , Cmd.batch
         (focusOn "container-left" NoOp :: commands)
     )
-
-
-
--- SUBSCRIPTIONS
 
 
 renameSelectedSourceFile : Model -> ( Model, Cmd Msg )
@@ -1329,9 +1327,32 @@ replace model originalString =
             originalString
 
 
+closeFileEditor : Model -> Model
+closeFileEditor model =
+    if model.focusedZone /= FileNameEditor then
+        { model
+            | editedFile = Nothing
+            , editedFileName = ""
+            , sourceFiles =
+                List.map
+                    (\f ->
+                        if f.status == Edited then
+                            { f | status = Selected }
+
+                        else
+                            f
+                    )
+                    model.sourceFiles
+        }
+
+    else
+        model
+
+
 restoreFocus : Model -> ( Model, Cmd Msg )
 restoreFocus model =
     ( { model | focusedZone = model.previousFocusedZone }
+        |> closeFileEditor
     , focusOn
         (case model.previousFocusedZone of
             Confirmation ->
@@ -1366,8 +1387,8 @@ restoreFocus model =
     )
 
 
-selectSimilarFiles : Model -> Target -> ( Model, Cmd Msg )
-selectSimilarFiles model target =
+selectSimilarFiles : Target -> Model -> ( Model, Cmd Msg )
+selectSimilarFiles target model =
     case ( model.referenceFile, target ) of
         ( Just file, Source ) ->
             ( { model | sourceFiles = selectSimilar file model.minSimilarity model.sourceFiles }, Cmd.none )
@@ -1711,21 +1732,9 @@ update msg mymodel =
                             originalPaths
                 in
                 { model
-                    | editedFile = Nothing
-                    , editedFileName = ""
-                    , focusedZone = LeftSide
+                    | focusedZone = LeftSide
                     , history = commands :: model.history
                     , previousFocusedZone = model.focusedZone
-                    , sourceFiles =
-                        List.map
-                            (\f ->
-                                if f.status == Edited then
-                                    { f | status = Selected }
-
-                                else
-                                    f
-                            )
-                            model.sourceFiles
                 }
             , Cmd.batch
                 [ getSourceDirectoryContent model.sourceDirectoryPath
@@ -1763,28 +1772,35 @@ update msg mymodel =
         UserChangedDestinationDirectoryFilter filteringString ->
             ( { model | destinationDirectoryFilter = filteringString }
                 |> filterDestinationDirectories
+                |> closeFileEditor
             , Cmd.none
             )
 
         UserChangedDestinationFilesFilter filteringString ->
             ( { model | destinationFilesFilter = filteringString }
                 |> filterDestinationFiles
+                |> closeFileEditor
             , Cmd.none
             )
 
         UserChangedSourceFilter filteringString ->
             ( { model | sourceFilter = filteringString }
                 |> filterSourceFiles
+                |> closeFileEditor
             , Cmd.none
             )
 
         UserChangedSourceReplace replaceString ->
             ( { model | sourceReplace = replaceString }
+                |> closeFileEditor
             , Cmd.none
             )
 
         UserChangedSourceSearch searchString ->
-            ( { model | sourceSearch = searchString }, Cmd.none )
+            ( { model | sourceSearch = searchString }
+                |> closeFileEditor
+            , Cmd.none
+            )
 
         UserClickedCancel ->
             let
@@ -1803,6 +1819,7 @@ update msg mymodel =
                 , previousFocusedZone = model.focusedZone
                 , sourceFiles = List.map unselectForDeletion model.sourceFiles
               }
+                |> closeFileEditor
             , focusOn "container-left" NoOp
             )
 
@@ -1810,32 +1827,41 @@ update msg mymodel =
             ( { model
                 | destinationDirectoryFilter = model.sourceFilter
                 , destinationFilesFilter = model.sourceFilter
+                , focusedZone = LeftSide
               }
+                |> closeFileEditor
                 |> filterDestinationFiles
                 |> filterDestinationDirectories
             , Cmd.none
             )
 
         UserClickedClearSourceFilter ->
-            ( { model | sourceFilter = "" }
+            ( { model
+                | sourceFilter = ""
+                , focusedZone = LeftSide
+              }
+                |> closeFileEditor
                 |> filterSourceFiles
             , Cmd.none
             )
 
         UserClickedClearDestinationDirectoryFilter ->
-            ( { model | destinationDirectoryFilter = "" } |> filterDestinationDirectories
+            ( { model | destinationDirectoryFilter = "" }
+                |> filterDestinationDirectories
+                |> closeFileEditor
             , Cmd.none
             )
 
         UserClickedClearDestinationFilesFilter ->
-            ( { model | destinationFilesFilter = "" } |> filterDestinationFiles
+            ( { model | destinationFilesFilter = "" }
+                |> filterDestinationFiles
+                |> closeFileEditor
             , Cmd.none
             )
 
         UserClickedCloseError ->
-            { model
-                | error = Nothing
-            }
+            { model | error = Nothing }
+                |> closeFileEditor
                 |> restoreFocus
 
         UserClickedDelete ->
@@ -1845,7 +1871,7 @@ update msg mymodel =
             let
                 newDestinationPath : String
                 newDestinationPath =
-                    case ( Debug.log "isAbsolute" isAbsolute, Debug.log "file.name" file.name ) of
+                    case ( isAbsolute, file.name ) of
                         ( True, _ ) ->
                             if file.parentPath == unixPathSep then
                                 -- parent is root dir on Mac, prevent bad path name like //Users
@@ -1860,7 +1886,9 @@ update msg mymodel =
                         ( False, _ ) ->
                             model.destinationDirectoryPath ++ model.pathSeparator ++ file.name
             in
-            ( model |> changeDestinationDirectory newDestinationPath
+            ( model
+                |> changeDestinationDirectory newDestinationPath
+                |> closeFileEditor
             , Cmd.batch
                 [ getDestinationDirectoryFiles newDestinationPath
                 , getDestinationSubdirectories newDestinationPath
@@ -1868,7 +1896,8 @@ update msg mymodel =
             )
 
         UserClickedDestinationDirectoryButton ->
-            ( model
+            ( { model | focusedZone = RightSide }
+                |> closeFileEditor
             , selectDestinationDirectory model.destinationDirectoryPath
             )
 
@@ -1879,11 +1908,12 @@ update msg mymodel =
                     select model model.destinationFiles file
             in
             ( { model | destinationFiles = updatedDestinationFiles }
+                |> closeFileEditor
             , Cmd.none
             )
 
         UserClickedReload target ->
-            reload model target
+            reload target model
 
         UserClickedReplaceButton ->
             let
@@ -1893,6 +1923,7 @@ update msg mymodel =
                         |> List.filterMap (nameReplacement model)
             in
             ( { model | sourceReplace = "" }
+                |> closeFileEditor
             , applyRenaming model renamings
             )
 
@@ -1915,12 +1946,17 @@ update msg mymodel =
                         ( False, _ ) ->
                             model.sourceDirectoryPath ++ model.pathSeparator ++ file.name
             in
-            ( model |> changeSourceDirectory newSourcePath
+            ( model
+                |> changeSourceDirectory newSourcePath
+                |> closeFileEditor
             , getSourceDirectoryContent newSourcePath
             )
 
         UserClickedSourceDirectoryButton ->
-            ( model, selectSourceDirectory model.sourceDirectoryPath )
+            ( { model | focusedZone = LeftSide }
+                |> closeFileEditor
+            , selectSourceDirectory model.sourceDirectoryPath
+            )
 
         UserClickedSourceFile file ->
             let
@@ -1934,6 +1970,7 @@ update msg mymodel =
                 , sourceFiles = updatedSourceFiles
               }
                 |> filterSourceFiles
+                |> closeFileEditor
             , focusOn "container-left" NoOp
             )
 
@@ -1942,6 +1979,7 @@ update msg mymodel =
                 | focusedZone = focus
                 , previousFocusedZone = model.focusedZone
               }
+                |> closeFileEditor
             , Cmd.none
             )
 
@@ -2010,7 +2048,12 @@ update msg mymodel =
                     ( model, Cmd.none )
 
         UserChangedMaxDistance maxDistance ->
-            selectSimilarFiles { model | minSimilarity = round maxDistance } Source
+            { model
+                | minSimilarity = round maxDistance
+                , focusedZone = LeftSide
+            }
+                |> closeFileEditor
+                |> selectSimilarFiles Source
 
         WindowFocusChanged _ ->
             ( { model
