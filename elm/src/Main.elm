@@ -1137,8 +1137,17 @@ processMainShortcuts model target event =
 
     else if event.altKey then
         case event.keyCode of
+            Key.D ->
+                ( model, focusOn "filtering-dir-right" NoOp )
+
+            Key.F ->
+                ( model, focusOn "filtering-files-right" NoOp )
+
             Key.F4 ->
                 ( model, quit () )
+
+            Key.S ->
+                ( model, focusOn "filtering-left" NoOp )
 
             _ ->
                 ( model, Cmd.none )
