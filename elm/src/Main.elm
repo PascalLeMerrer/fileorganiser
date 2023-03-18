@@ -1109,6 +1109,11 @@ processMainShortcuts model target event =
                 , Cmd.none
                 )
 
+            ( Key.F, False ) ->
+                ( { model | focusedZone = SourceSearchReplace }
+                , focusOn "search-left" NoOp
+                )
+
             ( Key.R, False ) ->
                 reload target model
 
