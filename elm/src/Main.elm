@@ -457,7 +457,6 @@ changeDestinationDirectory path model =
         | destinationDirectoryPath = path
         , destinationNavigationHistory = model.destinationDirectoryPath :: model.destinationNavigationHistory
         , isDestinationLoadingInProgress = True
-        , isSourceLoadingInProgress = True
     }
 
 
@@ -1440,12 +1439,18 @@ undoMove model cmds command =
     let
         debugString : String
         debugString =
-            "Moving " ++ (String.fromInt <| List.length filesToMove) ++ " to " ++ destination
+            "Moving " ++ (String.fromInt <| List.length filesToMove) ++ " to " ++ originalSource
 
-        destination : String
-        destination =
+        originalSource : String
+        originalSource =
             command.source
                 |> Maybe.withDefault ""
+
+        originalDestination : String
+        originalDestination =
+            command.destination
+                |> Maybe.withDefault ""
+                |> Debug.log "originalDestination"
 
         filesToMove : List String
         filesToMove =
@@ -1457,8 +1462,15 @@ undoMove model cmds command =
             command.destination
                 |> Maybe.withDefault ""
     in
-    ( { model | debug = debugString :: model.debug, isUndoing = True }
-    , moveFiles ( filesToMove, destination ) :: cmds
+    ( { model
+        | debug = debugString :: model.debug
+        , isUndoing = True
+      }
+        |> changeDestinationDirectory originalDestination
+        |> changeSourceDirectory originalSource
+    , getDestinationSubdirectories originalDestination
+        :: moveFiles ( filesToMove, originalSource )
+        :: cmds
     )
 
 
