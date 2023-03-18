@@ -1,10 +1,9 @@
-module File exposing (File, FileStatus(..), defaultDir, extendSelectionToNext, extendSelectionToPrevious, fileDecoder, selectNext, selectPrevious, selectSimilar, toggleSelectionStatus, withName, withParentPath, withStatus)
+module File exposing (File, FileStatus(..), defaultDir, extendSelectionToNext, extendSelectionToPrevious, fileDecoder, selectNext, selectPrevious, toggleSelectionStatus, withName, withParentPath, withStatus)
 
 import Iso8601
 import Json.Decode exposing (Decoder)
 import Json.Decode.Pipeline exposing (hardcoded, required)
 import List.Extra
-import StringComparison exposing (isSimilarityLevelGreaterThan)
 import Time exposing (Posix, millisToPosix)
 
 
@@ -109,15 +108,6 @@ selectPrevious files =
             |> selectFirst
 
 
-
-{- selects files whose name have a high level of similarity -}
-
-
-selectSimilar : File -> Int -> List File -> List File
-selectSimilar referenceFile minSimilarity files =
-    List.map (selectIfSimilar referenceFile minSimilarity) files
-
-
 toggleSelectionStatus : File -> File
 toggleSelectionStatus file =
     case file.status of
@@ -191,18 +181,6 @@ extendSelection visit files =
 selectFirst : List File -> List File
 selectFirst files =
     List.Extra.updateAt 0 (\f -> { f | status = Selected }) files
-
-
-selectIfSimilar : File -> Int -> File -> File
-selectIfSimilar referenceFile minSimilarity file =
-    if
-        (file == referenceFile)
-            || isSimilarityLevelGreaterThan referenceFile.name file.name minSimilarity
-    then
-        { file | status = Selected }
-
-    else
-        { file | status = Unselected }
 
 
 selectLast : List File -> List File

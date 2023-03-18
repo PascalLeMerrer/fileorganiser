@@ -2,7 +2,7 @@ port module Main exposing (Command, FocusedZone, Model, Msg, Operation, defaultM
 
 import Browser
 import Browser.Dom
-import File exposing (File, FileStatus(..), defaultDir, extendSelectionToNext, extendSelectionToPrevious, fileDecoder, selectNext, selectPrevious, selectSimilar, toggleSelectionStatus, withName, withParentPath, withStatus)
+import File exposing (File, FileStatus(..), defaultDir, extendSelectionToNext, extendSelectionToPrevious, fileDecoder, selectNext, selectPrevious, toggleSelectionStatus, withName, withParentPath, withStatus)
 import Filesize
 import Html exposing (Html, button, div, footer, form, h2, input, li, span, text, ul)
 import Html.Attributes exposing (class, disabled, id, placeholder, tabindex, type_, value)
@@ -14,7 +14,6 @@ import Keyboard.Key as Key exposing (Key(..))
 import List.Extra
 import Pattern
 import Regex
-import SingleSlider
 import String.Mark as Mark exposing (defaultOptions, multiWord)
 import Task
 import Time exposing (Month(..))
@@ -109,7 +108,6 @@ type FocusedZone
     | DirNameEditor
     | RightSide
     | SourceSearchReplace
-    | SimilarityLevel
 
 
 type alias Model =
@@ -138,8 +136,6 @@ type alias Model =
     , isUndoing : Bool
     , previousFocusedZone : FocusedZone
     , pathSeparator : String
-    , referenceFile : Maybe File -- for search by similarity of name
-    , minSimilarity : Int
     , sourceDirectoryPath : String
     , sourceFiles : List File
     , sourceFilter : String
@@ -167,7 +163,6 @@ type Msg
     | NoOp
     | UserChangedDestinationDirectoryFilter String
     | UserChangedDestinationFilesFilter String
-    | UserChangedMaxDistance Float
     | UserChangedSourceFilter String
     | UserChangedSourceReplace String
     | UserChangedSourceSearch String
@@ -228,8 +223,6 @@ defaultModel =
     , isUndoing = False
     , previousFocusedZone = LeftSide
     , pathSeparator = unixPathSep
-    , referenceFile = Nothing
-    , minSimilarity = 8
     , sourceDirectoryPath = "."
     , sourceFiles = []
     , sourceFilter = ""
@@ -1144,22 +1137,6 @@ processMainShortcuts model target event =
             ( Key.U, False ) ->
                 undo model
 
-            ( Key.W, False ) ->
-                let
-                    files =
-                        case target of
-                            Source ->
-                                model.sourceFiles
-
-                            Destination ->
-                                model.destinationFiles
-
-                    firstSelectedFile : Maybe File
-                    firstSelectedFile =
-                        List.Extra.find (\f -> f.status == Selected) files
-                in
-                selectSimilarFiles target { model | referenceFile = firstSelectedFile }
-
             ( Key.Left, _ ) ->
                 goBack model target
 
@@ -1210,28 +1187,11 @@ processMainShortcuts model target event =
             ( Key.Delete, False ) ->
                 prepareSelectedFilesForRemoval model
 
-            ( Key.Add, _ ) ->
-                ( { model | minSimilarity = min (model.minSimilarity + 1) maxSimilarity }, Cmd.none )
-
-            ( Key.Subtract, _ ) ->
-                ( { model | minSimilarity = max (model.minSimilarity + 1) 0 }, Cmd.none )
-
             ( Key.F2, False ) ->
                 renameSelectedSourceFile model
 
             ( Key.F5, False ) ->
                 reload target model
-
-            ( Key.Unknown _, _ ) ->
-                case event.key of
-                    Just "+" ->
-                        ( { model | minSimilarity = min (model.minSimilarity + 1) maxSimilarity }, Cmd.none )
-
-                    Just "-" ->
-                        ( { model | minSimilarity = max (model.minSimilarity - 1) 0 }, Cmd.none )
-
-                    _ ->
-                        ( model, Cmd.none )
 
             _ ->
                 ( model, Cmd.none )
@@ -1380,27 +1340,11 @@ restoreFocus model =
             RightSide ->
                 "container-right"
 
-            SimilarityLevel ->
-                "similarity-level"
-
             SourceSearchReplace ->
                 "search-left"
         )
         NoOp
     )
-
-
-selectSimilarFiles : Target -> Model -> ( Model, Cmd Msg )
-selectSimilarFiles target model =
-    case ( model.referenceFile, target ) of
-        ( Just file, Source ) ->
-            ( { model | sourceFiles = selectSimilar file model.minSimilarity model.sourceFiles }, Cmd.none )
-
-        ( Just file, Destination ) ->
-            ( { model | destinationFiles = selectSimilar file model.minSimilarity model.destinationFiles }, Cmd.none )
-
-        ( Nothing, _ ) ->
-            ( model, Cmd.none )
 
 
 
@@ -2054,14 +1998,6 @@ update msg myModel =
                 _ ->
                     ( model, Cmd.none )
 
-        UserChangedMaxDistance maxDistance ->
-            { model
-                | minSimilarity = round maxDistance
-                , focusedZone = LeftSide
-            }
-                |> closeFileEditor
-                |> selectSimilarFiles Source
-
         WindowFocusChanged _ ->
             ( { model
                 | isControlPressed = False
@@ -2573,7 +2509,6 @@ viewSourceFiles model =
     div [ class "panel" ]
         [ div [ class <| "panel-header" ++ additionalHeaderClass model LeftSide ]
             [ h2 [] [ text <| fileCount model Source ]
-            , viewSimilarityLevelForm model
             , viewSearchReplaceForm model
             ]
         , div
@@ -2599,40 +2534,6 @@ viewSourceFiles model =
                 |> List.map (viewFile model UserClickedSourceFile True)
             )
         ]
-
-
-maxSimilarity : Int
-maxSimilarity =
-    30
-
-
-viewSimilarityLevelForm : Model -> Html Msg
-viewSimilarityLevelForm model =
-    --div []
-    --    [
-    --input
-    --    [ class "input"
-    --    , id "similarity-level"
-    --    , onFocus (UserChangedFocusedZone SimilarityLevel)
-    --    , onInput UserChangedSimilarityLevel
-    --    , placeholder "Search"
-    --    , type_ "text"
-    --    , value <| String.fromFloat model.similarityLevel
-    --    ]
-    --    []
-    --,
-    SingleSlider.view <|
-        SingleSlider.init
-            { min = 0
-            , max = toFloat maxSimilarity
-            , value = toFloat model.minSimilarity
-            , step = 1
-            , onChange = UserChangedMaxDistance
-            }
-
-
-
---]
 
 
 viewSearchReplaceForm : Model -> Html Msg
