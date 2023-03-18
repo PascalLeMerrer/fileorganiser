@@ -142,9 +142,10 @@ func (a *App) GetDirectoryFiles(dirName string) ([]FileInfo, error) {
 
     for _, entry := range fileList {
     	isHidden, _ := isHidden(entry.Name(), dirName)
+    	isIgnored := filepath.Ext(entry.Name()) == ".dctmp"
     	//fmt.Printf("Name: %s - Parent Dir: %s \n", entry.Name(), dirName)
     	//if isHidden || entry.IsDir() || entry.Name() == ".." && dirName == root() {
-    	if isHidden || entry.IsDir() {
+    	if isHidden || entry.IsDir() || isIgnored {
     	    continue
     	}
 
@@ -251,11 +252,11 @@ func (a *App) Move(sourceFiles []string, destinationDirectory string) ([]FileInf
 		newLocation := filepath.Join(destinationDirectory, filename)
 		err := os.Rename(sourcePath, newLocation)
 		if err != nil {
-			// os.Rename does not support moving files between disks 
-			err = MoveFileToOtherDisk(sourcePath, newLocation) 
+			// os.Rename does not support moving files between disks
+			err = MoveFileToOtherDisk(sourcePath, newLocation)
 			if err != nil {
 				return nil, err
-			}			
+			}
 		}
 		info, err := os.Stat(newLocation)
 		if err != nil {
