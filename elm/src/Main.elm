@@ -88,7 +88,7 @@ port selectDestinationDirectory : String -> Cmd msg
 port selectSourceDirectory : String -> Cmd msg
 
 
-port windowFocusChanged : (() -> msg) -> Sub msg
+port windowFocusChanged : (String -> msg) -> Sub msg
 
 
 type alias Command =
@@ -188,7 +188,7 @@ type Msg
     | UserPressedOrReleasedKey KeyboardEvent
     | UserSubmittedDirName
     | UserSubmittedFilename
-    | WindowFocusChanged ()
+    | WindowFocusChanged String
 
 
 type Operation
@@ -2005,7 +2005,7 @@ update msg myModel =
                 _ ->
                     ( model, Cmd.none )
 
-        WindowFocusChanged () ->
+        WindowFocusChanged _ ->
             ( { model
                 | isShiftPressed = False
                 , isControlPressed = False

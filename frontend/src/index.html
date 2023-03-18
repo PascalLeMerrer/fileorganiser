@@ -166,8 +166,8 @@
         window.go.main.App.Exit();
       });
 
-      window.onblur = function() { app.ports.windowFocusChanged.send({}) }
-      window.onfocus = function() { app.ports.windowFocusChanged.send({}) }
+      window.onblur = function() { app.ports.windowFocusChanged.send("onblur") }
+      window.onfocus = function() { app.ports.windowFocusChanged.send("onfocus") }
   </script>
 </body>
 
