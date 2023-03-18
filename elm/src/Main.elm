@@ -101,10 +101,11 @@ type alias Command =
 
 type FocusedZone
     = Confirmation
+    | DestinationFileNameEditor
     | ErrorMessage
     | Filtering
     | LeftSide
-    | FileNameEditor
+    | SourceFileNameEditor
     | DirNameEditor
     | RightSide
     | SourceSearchReplace
@@ -187,7 +188,7 @@ type Msg
     | UserPressedKey Target KeyboardEvent
     | UserPressedOrReleasedKey KeyboardEvent
     | UserSubmittedDirName
-    | UserSubmittedFilename
+    | UserSubmittedFilename Target
     | WindowFocusChanged String
 
 
@@ -504,20 +505,25 @@ changeStatusOfSourceFiles fromStatus toStatus model =
 
 closeFileEditor : Model -> Model
 closeFileEditor model =
-    if model.focusedZone /= FileNameEditor then
+    let
+        unedit : List File -> List File
+        unedit files =
+            List.map
+                (\f ->
+                    if f.status == Edited then
+                        { f | status = Selected }
+
+                    else
+                        f
+                )
+                files
+    in
+    if model.focusedZone /= SourceFileNameEditor && model.focusedZone /= DestinationFileNameEditor then
         { model
             | editedFile = Nothing
             , editedFileName = ""
-            , sourceFiles =
-                List.map
-                    (\f ->
-                        if f.status == Edited then
-                            { f | status = Selected }
-
-                        else
-                            f
-                    )
-                    model.sourceFiles
+            , destinationFiles = unedit model.destinationFiles
+            , sourceFiles = unedit model.sourceFiles
         }
 
     else
@@ -1057,7 +1063,7 @@ processKeyboardShortcut model target event =
         LeftSide ->
             processMainShortcuts model target event
 
-        FileNameEditor ->
+        SourceFileNameEditor ->
             case event.keyCode of
                 Key.Escape ->
                     let
@@ -1153,7 +1159,7 @@ processMainShortcuts model target event =
                 openSelectedFile model target
 
             ( Key.R, False ) ->
-                renameSelectedSourceFile model
+                renameSelectedFile model
 
             ( Key.U, False ) ->
                 undo model
@@ -1209,7 +1215,7 @@ processMainShortcuts model target event =
                 prepareSelectedFilesForRemoval model
 
             ( Key.F2, False ) ->
-                renameSelectedSourceFile model
+                renameSelectedFile model
 
             ( Key.F5, False ) ->
                 reload target model
@@ -1261,6 +1267,19 @@ removeSelectedFiles model =
     )
 
 
+renameSelectedFile : Model -> ( Model, Cmd Msg )
+renameSelectedFile model =
+    case model.focusedZone of
+        LeftSide ->
+            renameSelectedSourceFile model
+
+        RightSide ->
+            renameSelectedDestinationFile model
+
+        _ ->
+            ( model, Cmd.none )
+
+
 renameSelectedSourceFile : Model -> ( Model, Cmd Msg )
 renameSelectedSourceFile model =
     let
@@ -1282,7 +1301,35 @@ renameSelectedSourceFile model =
                 , editedFileName = file.name
                 , sourceFiles = sourceDirectoryFiles
               }
-            , focusOn "filename-input" NoOp
+            , focusOn "source-filename-input" NoOp
+            )
+
+        Nothing ->
+            ( model, Cmd.none )
+
+
+renameSelectedDestinationFile : Model -> ( Model, Cmd Msg )
+renameSelectedDestinationFile model =
+    let
+        fileToEdit : Maybe File
+        fileToEdit =
+            model.destinationFiles
+                |> List.Extra.find (\f -> f.satisfiesFilter && f.status == Selected)
+    in
+    case fileToEdit of
+        Just file ->
+            let
+                destinationDirectoryFiles : List File
+                destinationDirectoryFiles =
+                    model.destinationFiles
+                        |> List.Extra.updateIf (\f -> f == file) (\f -> { f | status = Edited })
+            in
+            ( { model
+                | editedFile = Just file
+                , editedFileName = file.name
+                , destinationFiles = destinationDirectoryFiles
+              }
+            , focusOn "destination-filename-input" NoOp
             )
 
         Nothing ->
@@ -1325,6 +1372,12 @@ restoreFocus model =
             Confirmation ->
                 "delete-button"
 
+            DestinationFileNameEditor ->
+                "destination-filename-input"
+
+            DirNameEditor ->
+                "dirname-input"
+
             ErrorMessage ->
                 "close-error"
 
@@ -1335,14 +1388,11 @@ restoreFocus model =
             LeftSide ->
                 "container-left"
 
-            FileNameEditor ->
-                "filename-input"
-
-            DirNameEditor ->
-                "dirname-input"
-
             RightSide ->
                 "container-right"
+
+            SourceFileNameEditor ->
+                "source-filename-input"
 
             SourceSearchReplace ->
                 "search-left"
@@ -1702,14 +1752,25 @@ update msg myModel =
                             originalPaths
                 in
                 { model
-                    | focusedZone = LeftSide
+                    | focusedZone =
+                        if model.focusedZone == SourceFileNameEditor then
+                            LeftSide
+
+                        else
+                            RightSide
                     , history = commands :: model.history
                     , previousFocusedZone = model.focusedZone
                 }
-            , Cmd.batch
-                [ getSourceDirectoryContent model.sourceDirectoryPath
-                , focusOn "container-left" NoOp
-                ]
+            , Cmd.batch <|
+                if model.focusedZone == SourceFileNameEditor then
+                    [ getSourceDirectoryContent model.sourceDirectoryPath
+                    , focusOn "container-left" NoOp
+                    ]
+
+                else
+                    [ getDestinationDirectoryFiles model.destinationDirectoryPath
+                    , focusOn "container-right" NoOp
+                    ]
             )
 
         BackendReturnedSourceDirectoryContent directoryContent ->
@@ -1983,11 +2044,16 @@ update msg myModel =
             else
                 ( model, Cmd.none )
 
-        UserSubmittedFilename ->
+        UserSubmittedFilename target ->
             let
                 isConflicting : Bool
                 isConflicting =
-                    List.any (\f -> f.name == model.editedFileName) model.sourceFiles
+                    case target of
+                        Destination ->
+                            List.any (\f -> f.name == model.editedFileName) model.sourceFiles
+
+                        Source ->
+                            List.any (\f -> f.name == model.editedFileName) model.sourceFiles
 
                 isNameEmpty : Bool
                 isNameEmpty =
@@ -1996,7 +2062,7 @@ update msg myModel =
             case ( model.editedFile, isConflicting, isNameEmpty ) of
                 ( Just _, True, False ) ->
                     ( { model
-                        | error = Just ("A file with the name " ++ model.editedFileName ++ " already exists in the source directory")
+                        | error = Just ("A file with the name " ++ model.editedFileName ++ " already exists in the same directory")
                         , focusedZone = ErrorMessage
                       }
                     , focusOn "close-error" NoOp
@@ -2161,7 +2227,7 @@ viewDestinationFiles model =
             [ class "panel-content" ]
             (model.destinationFiles
                 |> List.filter .satisfiesFilter
-                |> List.map (viewFile model UserClickedDestinationFile False)
+                |> List.map (viewFile model Destination UserClickedDestinationFile False)
             )
         ]
 
@@ -2257,14 +2323,14 @@ viewEditedDirectoryName model =
         ]
 
 
-viewEditedFilename : Model -> Html Msg
-viewEditedFilename model =
-    form [ onSubmit UserSubmittedFilename ]
+viewEditedSourceFilename : Model -> Html Msg
+viewEditedSourceFilename model =
+    form [ onSubmit <| UserSubmittedFilename Source ]
         [ input
             [ class "file-input"
-            , id "filename-input"
+            , id "source-filename-input"
             , onInput UserModifiedFileName
-            , onFocus (UserChangedFocusedZone FileNameEditor)
+            , onFocus (UserChangedFocusedZone SourceFileNameEditor)
             , Events.on "keydown" (simpleKeyDecoder Source)
             , value model.editedFileName
             ]
@@ -2272,10 +2338,30 @@ viewEditedFilename model =
         ]
 
 
-viewFile : Model -> (File -> Msg) -> Bool -> File -> Html Msg
-viewFile model onClickMsg canBeSearchedAndReplaced file =
+viewEditedDestinationFilename : Model -> Html Msg
+viewEditedDestinationFilename model =
+    form [ onSubmit <| UserSubmittedFilename Destination ]
+        [ input
+            [ class "file-input"
+            , id "destination-filename-input"
+            , onInput UserModifiedFileName
+            , onFocus (UserChangedFocusedZone DestinationFileNameEditor)
+            , Events.on "keydown" (simpleKeyDecoder Destination)
+            , value model.editedFileName
+            ]
+            []
+        ]
+
+
+viewFile : Model -> Target -> (File -> Msg) -> Bool -> File -> Html Msg
+viewFile model target onClickMsg canBeSearchedAndReplaced file =
     if file.status == Edited then
-        viewEditedFilename model
+        case target of
+            Source ->
+                viewEditedSourceFilename model
+
+            Destination ->
+                viewEditedDestinationFilename model
 
     else
         viewReadOnlyFile model onClickMsg canBeSearchedAndReplaced file
@@ -2582,7 +2668,7 @@ viewSourceFiles model =
             [ class "panel-content" ]
             (model.sourceFiles
                 |> List.filter .satisfiesFilter
-                |> List.map (viewFile model UserClickedSourceFile True)
+                |> List.map (viewFile model Source UserClickedSourceFile True)
             )
         ]
 
