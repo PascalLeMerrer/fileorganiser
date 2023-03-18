@@ -1,3 +1,4 @@
 elm-stuff
 /.vscode
 test_data
+build/bin
