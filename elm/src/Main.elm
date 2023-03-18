@@ -10,16 +10,13 @@ import Html.Events as Events exposing (onClick, onFocus, onInput, onSubmit)
 import Json.Decode exposing (list)
 import Json.Encode
 import Keyboard.Event exposing (KeyboardEvent, decodeKeyboardEvent)
-import Keyboard.Key as Key exposing (Key(..))
+import Keyboard.Key as Key
 import List.Extra
 import Pattern
 import Regex
 import String.Mark as Mark exposing (defaultOptions, multiWord)
 import Task
 import Time exposing (Month(..))
-
-
-port windowFocusChanged : (() -> msg) -> Sub msg
 
 
 port createDirectory : String -> Cmd msg
@@ -89,6 +86,9 @@ port selectDestinationDirectory : String -> Cmd msg
 
 
 port selectSourceDirectory : String -> Cmd msg
+
+
+port windowFocusChanged : (() -> msg) -> Sub msg
 
 
 type alias Command =
@@ -216,10 +216,10 @@ defaultModel =
     , history = []
     , isCreatingDirectory = False
     , isDebugVisible = False
-    , isShiftPressed = False
-    , isControlPressed = False
     , isDestinationLoadingInProgress = True
     , isSourceLoadingInProgress = True
+    , isShiftPressed = False
+    , isControlPressed = False
     , isUndoing = False
     , previousFocusedZone = LeftSide
     , pathSeparator = unixPathSep
@@ -451,11 +451,6 @@ changeAllFileStatus model target status =
             }
 
 
-resetKeyStatuses : Model -> Model
-resetKeyStatuses model =
-    { model | isShiftPressed = False, isControlPressed = False }
-
-
 changeDestinationDirectory : String -> Model -> Model
 changeDestinationDirectory path model =
     { model
@@ -469,9 +464,9 @@ changeDestinationDirectory path model =
 changeSourceDirectory : String -> Model -> Model
 changeSourceDirectory path model =
     { model
-        | sourceDirectoryPath = path
+        | isSourceLoadingInProgress = True
+        , sourceDirectoryPath = path
         , sourceNavigationHistory = model.sourceDirectoryPath :: model.sourceNavigationHistory
-        , isSourceLoadingInProgress = True
     }
 
 
@@ -506,6 +501,28 @@ changeStatusOfSourceFiles fromStatus toStatus model =
                 model.sourceFiles
     }
         |> filterSourceFiles
+
+
+closeFileEditor : Model -> Model
+closeFileEditor model =
+    if model.focusedZone /= FileNameEditor then
+        { model
+            | editedFile = Nothing
+            , editedFileName = ""
+            , sourceFiles =
+                List.map
+                    (\f ->
+                        if f.status == Edited then
+                            { f | status = Selected }
+
+                        else
+                            f
+                    )
+                    model.sourceFiles
+        }
+
+    else
+        model
 
 
 createNewDirectory : Model -> ( Model, Cmd Msg )
@@ -862,8 +879,8 @@ moveSelectedFiles model =
                     )
     in
     ( { model
-        | isSourceLoadingInProgress = True
-        , isDestinationLoadingInProgress = True
+        | isDestinationLoadingInProgress = True
+        , isSourceLoadingInProgress = True
       }
     , moveFiles ( filesToMove, destination )
     )
@@ -1290,26 +1307,9 @@ replace model originalString =
             originalString
 
 
-closeFileEditor : Model -> Model
-closeFileEditor model =
-    if model.focusedZone /= FileNameEditor then
-        { model
-            | editedFile = Nothing
-            , editedFileName = ""
-            , sourceFiles =
-                List.map
-                    (\f ->
-                        if f.status == Edited then
-                            { f | status = Selected }
-
-                        else
-                            f
-                    )
-                    model.sourceFiles
-        }
-
-    else
-        model
+resetKeyStatuses : Model -> Model
+resetKeyStatuses model =
+    { model | isShiftPressed = False, isControlPressed = False }
 
 
 restoreFocus : Model -> ( Model, Cmd Msg )
@@ -1433,6 +1433,10 @@ undo model =
 undoMove : Model -> List (Cmd Msg) -> Command -> ( Model, List (Cmd Msg) )
 undoMove model cmds command =
     let
+        debugString : String
+        debugString =
+            "Moving " ++ (String.fromInt <| List.length filesToMove) ++ " to " ++ destination
+
         destination : String
         destination =
             command.source
@@ -1447,11 +1451,8 @@ undoMove model cmds command =
         source =
             command.destination
                 |> Maybe.withDefault ""
-
-        debugString =
-            "Moving " ++ (String.fromInt <| List.length filesToMove) ++ " to " ++ destination
     in
-    ( { model | isUndoing = True, debug = debugString :: model.debug }
+    ( { model | debug = debugString :: model.debug, isUndoing = True }
     , moveFiles ( filesToMove, destination ) :: cmds
     )
 
@@ -1496,6 +1497,7 @@ unmarkFilesForDeletion model =
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg myModel =
     let
+        model : Model
         model =
             { myModel | debug = Debug.toString msg :: myModel.debug |> List.take 9 }
     in
@@ -1592,8 +1594,8 @@ update msg myModel =
             ( { updatedModel
                 | error = Just errorMsg
                 , focusedZone = ErrorMessage
-                , isSourceLoadingInProgress = False
                 , isDestinationLoadingInProgress = False
+                , isSourceLoadingInProgress = False
                 , previousFocusedZone = model.focusedZone
               }
             , Cmd.batch
@@ -1639,8 +1641,8 @@ update msg myModel =
                           }
                         ]
                             :: model.history
-                    , isSourceLoadingInProgress = False
                     , isDestinationLoadingInProgress = False
+                    , isSourceLoadingInProgress = False
                 }
             , Cmd.batch
                 [ getSourceDirectoryContent model.sourceDirectoryPath
@@ -1699,9 +1701,9 @@ update msg myModel =
                     List.partition .isDir directoryContent
             in
             ( { model
-                | sourceFiles = fileList |> sortByName
+                | isSourceLoadingInProgress = False
+                , sourceFiles = fileList |> sortByName
                 , sourceSubDirectories = dirList |> sortByName
-                , isSourceLoadingInProgress = False
               }
                 |> filterSourceFiles
             , Cmd.none
@@ -1788,8 +1790,8 @@ update msg myModel =
 
         UserClickedClearSourceFilter ->
             ( { model
-                | sourceFilter = ""
-                , focusedZone = LeftSide
+                | focusedZone = LeftSide
+                , sourceFilter = ""
               }
                 |> closeFileEditor
                 |> filterSourceFiles
@@ -1998,10 +2000,10 @@ update msg myModel =
                 _ ->
                     ( model, Cmd.none )
 
-        WindowFocusChanged _ ->
+        WindowFocusChanged () ->
             ( { model
-                | isControlPressed = False
-                , isShiftPressed = False
+                | isShiftPressed = False
+                , isControlPressed = False
               }
             , Cmd.none
             )
@@ -2083,6 +2085,16 @@ viewDate model time =
             String.fromInt (Time.toYear model.timezone time)
     in
     text (day ++ "/" ++ month ++ "/" ++ year)
+
+
+viewDebug : Model -> Html Msg
+viewDebug model =
+    if model.isDebugVisible then
+        ul [ class "debug" ]
+            (li [] [ text <| "destinationDirectoryPath: " ++ model.destinationDirectoryPath ] :: List.map (\msg -> li [] [ text <| "Msg: " ++ String.left 220 msg ]) model.debug)
+
+    else
+        text ""
 
 
 viewDestination : Model -> List (Html Msg)
@@ -2305,19 +2317,6 @@ viewFooter model =
         ]
 
 
-viewDebug : Model -> Html Msg
-viewDebug model =
-    if model.isDebugVisible then
-        ul [ class "debug" ]
-            ([ li [] [ text <| "destinationDirectoryPath: " ++ model.destinationDirectoryPath ]
-             ]
-                ++ List.map (\msg -> li [] [ text <| "Msg: " ++ String.left 220 msg ]) model.debug
-            )
-
-    else
-        text ""
-
-
 viewLeftSide : Model -> Html Msg
 viewLeftSide model =
     let
@@ -2343,6 +2342,11 @@ viewLeftSide model =
         )
     <|
         viewSource model
+
+
+viewLoadingAnimation : Html Msg
+viewLoadingAnimation =
+    div [ class "spin" ] []
 
 
 viewPath : Model -> Target -> Html Msg
@@ -2497,6 +2501,36 @@ viewRightSide model =
         viewDestination model
 
 
+viewSearchReplaceForm : Model -> Html Msg
+viewSearchReplaceForm model =
+    div [ class "search-form" ]
+        [ input
+            [ class "input"
+            , id "search-left"
+            , onFocus (UserChangedFocusedZone SourceSearchReplace)
+            , onInput UserChangedSourceSearch
+            , placeholder "Search"
+            , type_ "text"
+            , value model.sourceSearch
+            ]
+            []
+        , input
+            [ class "input"
+            , onFocus (UserChangedFocusedZone SourceSearchReplace)
+            , onInput UserChangedSourceReplace
+            , placeholder "Replace with"
+            , type_ "text"
+            , value model.sourceReplace
+            ]
+            []
+        , button
+            [ class "btn"
+            , onClick UserClickedReplaceButton
+            ]
+            [ text "Replace" ]
+        ]
+
+
 viewSource : Model -> List (Html Msg)
 viewSource model =
     [ viewSourceSubdirectories model
@@ -2536,36 +2570,6 @@ viewSourceFiles model =
         ]
 
 
-viewSearchReplaceForm : Model -> Html Msg
-viewSearchReplaceForm model =
-    div [ class "search-form" ]
-        [ input
-            [ class "input"
-            , id "search-left"
-            , onFocus (UserChangedFocusedZone SourceSearchReplace)
-            , onInput UserChangedSourceSearch
-            , placeholder "Search"
-            , type_ "text"
-            , value model.sourceSearch
-            ]
-            []
-        , input
-            [ class "input"
-            , onFocus (UserChangedFocusedZone SourceSearchReplace)
-            , onInput UserChangedSourceReplace
-            , placeholder "Replace with"
-            , type_ "text"
-            , value model.sourceReplace
-            ]
-            []
-        , button
-            [ class "btn"
-            , onClick UserClickedReplaceButton
-            ]
-            [ text "Replace" ]
-        ]
-
-
 viewSourceSubdirectories : Model -> Html Msg
 viewSourceSubdirectories model =
     div [ class "panel" ]
@@ -2593,8 +2597,3 @@ viewSourceSubdirectories model =
                 |> List.map (viewDirectory model (UserClickedSourceDirectory False))
             )
         ]
-
-
-viewLoadingAnimation : Html Msg
-viewLoadingAnimation =
-    div [ class "spin" ] []
