@@ -126,6 +126,7 @@ type alias Model =
     , editedFileName : String
     , error : Maybe String
     , filesToDelete : List File
+    , filesToRename : List File
     , focusedZone : FocusedZone
     , history : List (List Command)
     , isCreatingDirectory : Bool
@@ -213,6 +214,7 @@ defaultModel =
     , editedFileName = ""
     , error = Nothing
     , filesToDelete = []
+    , filesToRename = []
     , focusedZone = LeftSide
     , history = []
     , isCreatingDirectory = False
@@ -1159,7 +1161,7 @@ processMainShortcuts model target event =
                 openSelectedFile model target
 
             ( Key.R, False ) ->
-                renameSelectedFile model
+                renameSelectedFiles model
 
             ( Key.U, False ) ->
                 undo model
@@ -1215,7 +1217,7 @@ processMainShortcuts model target event =
                 prepareSelectedFilesForRemoval model
 
             ( Key.F2, False ) ->
-                renameSelectedFile model
+                renameSelectedFiles model
 
             ( Key.F5, False ) ->
                 reload target model
@@ -1243,6 +1245,20 @@ reload target model =
             )
 
 
+reloadFiles : Model -> Cmd Msg
+reloadFiles model =
+    Cmd.batch <|
+        if model.focusedZone == DestinationFileNameEditor then
+            [ getDestinationDirectoryFiles model.destinationDirectoryPath
+            , focusOn "container-right" NoOp
+            ]
+
+        else
+            [ getSourceDirectoryContent model.sourceDirectoryPath
+            , focusOn "container-left" NoOp
+            ]
+
+
 removeSelectedFiles : Model -> ( Model, Cmd Msg )
 removeSelectedFiles model =
     let
@@ -1267,73 +1283,75 @@ removeSelectedFiles model =
     )
 
 
-renameSelectedFile : Model -> ( Model, Cmd Msg )
-renameSelectedFile model =
+renameSelectedFiles : Model -> ( Model, Cmd Msg )
+renameSelectedFiles model =
     case model.focusedZone of
         LeftSide ->
-            renameSelectedSourceFile model
+            renameSelectedSourceFiles model
 
         RightSide ->
-            renameSelectedDestinationFile model
+            renameSelectedDestinationFiles model
 
         _ ->
             ( model, Cmd.none )
 
 
-renameSelectedSourceFile : Model -> ( Model, Cmd Msg )
-renameSelectedSourceFile model =
+renameSelectedSourceFiles : Model -> ( Model, Cmd Msg )
+renameSelectedSourceFiles model =
     let
-        fileToEdit : Maybe File
-        fileToEdit =
+        filesToEdit : List File
+        filesToEdit =
             model.sourceFiles
-                |> List.Extra.find (\f -> f.satisfiesFilter && f.status == Selected)
+                |> List.filter (\f -> f.satisfiesFilter && f.status == Selected)
     in
-    case fileToEdit of
-        Just file ->
+    case filesToEdit of
+        [] ->
+            ( model, Cmd.none )
+
+        firstFile :: nextFiles ->
             let
                 sourceDirectoryFiles : List File
                 sourceDirectoryFiles =
                     model.sourceFiles
-                        |> List.Extra.updateIf (\f -> f == file) (\f -> { f | status = Edited })
+                        |> List.Extra.updateIf (\f -> f == firstFile) (\f -> { f | status = Edited })
             in
             ( { model
-                | editedFile = Just file
-                , editedFileName = file.name
+                | editedFile = Just firstFile
+                , editedFileName = firstFile.name
+                , filesToRename = nextFiles
                 , sourceFiles = sourceDirectoryFiles
               }
             , focusOn "source-filename-input" NoOp
             )
 
-        Nothing ->
+
+renameSelectedDestinationFiles : Model -> ( Model, Cmd Msg )
+renameSelectedDestinationFiles model =
+    let
+        filesToEdit : List File
+        filesToEdit =
+            model.destinationFiles
+                |> List.filter (\f -> f.satisfiesFilter && f.status == Selected)
+    in
+    case filesToEdit of
+        [] ->
             ( model, Cmd.none )
 
-
-renameSelectedDestinationFile : Model -> ( Model, Cmd Msg )
-renameSelectedDestinationFile model =
-    let
-        fileToEdit : Maybe File
-        fileToEdit =
-            model.destinationFiles
-                |> List.Extra.find (\f -> f.satisfiesFilter && f.status == Selected)
-    in
-    case fileToEdit of
-        Just file ->
+        firstFile :: nextFiles ->
             let
                 destinationDirectoryFiles : List File
                 destinationDirectoryFiles =
                     model.destinationFiles
-                        |> List.Extra.updateIf (\f -> f == file) (\f -> { f | status = Edited })
+                        |> List.Extra.updateIf (\f -> f == firstFile) (\f -> { f | status = Edited })
             in
             ( { model
-                | editedFile = Just file
-                , editedFileName = file.name
+                | editedFile = Just firstFile
+                , editedFileName = firstFile.name
                 , destinationFiles = destinationDirectoryFiles
+                , filesToRename = nextFiles
               }
             , focusOn "destination-filename-input" NoOp
             )
-
-        Nothing ->
-            ( model, Cmd.none )
 
 
 type alias Renaming =
@@ -1727,51 +1745,57 @@ update msg myModel =
             )
 
         BackendReturnedRenamedFiles files originalPaths ->
-            ( if model.isUndoing then
+            if model.isUndoing then
                 -- don't add anything to history
-                { model | isUndoing = False }
+                ( { model | isUndoing = False }
+                , reloadFiles model
+                )
 
-              else
-                let
-                    commands : List Command
-                    commands =
-                        List.map2
-                            (\file originalPath ->
-                                let
-                                    newFile : File
-                                    newFile =
-                                        { file | status = Selected }
-                                in
-                                { operation = Rename
-                                , files = [ newFile ]
-                                , destination = Just (newFile.parentPath ++ model.pathSeparator ++ newFile.name)
-                                , source = Just originalPath
-                                }
-                            )
-                            files
-                            originalPaths
-                in
-                { model
-                    | focusedZone =
-                        if model.focusedZone == SourceFileNameEditor then
-                            LeftSide
+            else if List.isEmpty model.filesToRename then
+                ( model
+                    |> addLastRenamingToHistory files originalPaths
+                , reloadFiles model
+                )
 
-                        else
-                            RightSide
-                    , history = commands :: model.history
-                    , previousFocusedZone = model.focusedZone
-                }
-            , Cmd.batch <|
-                if model.focusedZone == SourceFileNameEditor then
-                    [ getSourceDirectoryContent model.sourceDirectoryPath
-                    , focusOn "container-left" NoOp
-                    ]
+            else
+                case model.focusedZone of
+                    SourceFileNameEditor ->
+                        { model
+                            | sourceFiles =
+                                List.map
+                                    (\f ->
+                                        if List.member f model.filesToRename then
+                                            { f | status = Selected }
 
-                else
-                    [ getDestinationDirectoryFiles model.destinationDirectoryPath
-                    , focusOn "container-right" NoOp
-                    ]
-            )
+                                        else
+                                            { f | status = Unselected }
+                                    )
+                                    model.sourceFiles
+                        }
+                            |> addLastRenamingToHistory files originalPaths
+                            |> renameSelectedSourceFiles
+
+                    DestinationFileNameEditor ->
+                        { model
+                            | destinationFiles =
+                                List.map
+                                    (\f ->
+                                        if List.member f model.filesToRename then
+                                            { f | status = Selected }
+
+                                        else
+                                            { f | status = Unselected }
+                                    )
+                                    model.destinationFiles
+                        }
+                            |> addLastRenamingToHistory files originalPaths
+                            |> renameSelectedDestinationFiles
+
+                    _ ->
+                        -- search and replace
+                        ( model |> addLastRenamingToHistory files originalPaths
+                        , reloadFiles model
+                        )
 
         BackendReturnedSourceDirectoryContent directoryContent ->
             let
@@ -2048,9 +2072,10 @@ update msg myModel =
             let
                 isConflicting : Bool
                 isConflicting =
+                    -- FIXME: it should not detect a conflict when the name of the file is unchanged
                     case target of
                         Destination ->
-                            List.any (\f -> f.name == model.editedFileName) model.sourceFiles
+                            List.any (\f -> f.name == model.editedFileName) model.destinationFiles
 
                         Source ->
                             List.any (\f -> f.name == model.editedFileName) model.sourceFiles
@@ -2068,15 +2093,15 @@ update msg myModel =
                     , focusOn "close-error" NoOp
                     )
 
-                ( Just file, False, False ) ->
+                ( Just editedFile, False, False ) ->
                     let
                         renaming : Renaming
                         renaming =
-                            { file = { file | name = model.editedFileName }
-                            , originalPath = file.name
+                            { file = { editedFile | name = model.editedFileName }
+                            , originalPath = editedFile.name
                             }
                     in
-                    ( { model | error = Nothing }
+                    ( renameFile target editedFile model
                     , applyRenaming model [ renaming ]
                     )
 
@@ -2090,6 +2115,69 @@ update msg myModel =
               }
             , Cmd.none
             )
+
+
+
+{- Apply file renaming to the model data structures (not on disk) -}
+
+
+renameFile : Target -> File -> Model -> Model
+renameFile target editedFile model =
+    { model
+        | error = Nothing
+        , sourceFiles =
+            if target == Source then
+                List.map
+                    (\f ->
+                        if editedFile.name == f.name then
+                            { f | name = model.editedFileName }
+
+                        else
+                            f
+                    )
+                    model.sourceFiles
+
+            else
+                model.sourceFiles
+        , destinationFiles =
+            if target == Destination then
+                List.map
+                    (\f ->
+                        if editedFile.name == f.name then
+                            { f | name = model.editedFileName }
+
+                        else
+                            f
+                    )
+                    model.destinationFiles
+
+            else
+                model.destinationFiles
+    }
+
+
+addLastRenamingToHistory : List File -> List String -> Model -> Model
+addLastRenamingToHistory files originalPaths model =
+    let
+        commands : List Command
+        commands =
+            List.map2
+                (\file originalPath ->
+                    let
+                        newFile : File
+                        newFile =
+                            { file | status = Selected }
+                    in
+                    { operation = Rename
+                    , files = [ newFile ]
+                    , destination = Just (newFile.parentPath ++ model.pathSeparator ++ newFile.name)
+                    , source = Just originalPath
+                    }
+                )
+                files
+                originalPaths
+    in
+    { model | history = commands :: model.history }
 
 
 view : Model -> Html Msg
