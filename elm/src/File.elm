@@ -9,6 +9,7 @@ import Time exposing (Posix, millisToPosix)
 
 type alias File =
     { isDir : Bool
+    , isMouseCursorOver : Bool
     , mode : Int
     , modTime : Posix
     , name : String
@@ -29,6 +30,7 @@ type FileStatus
 defaultDir : File
 defaultDir =
     { isDir = True
+    , isMouseCursorOver = False
     , mode = 777
     , modTime = millisToPosix 0
     , name = ""
@@ -71,6 +73,7 @@ fileDecoder : Decoder File
 fileDecoder =
     Json.Decode.succeed File
         |> required "IsDir" Json.Decode.bool
+        |> hardcoded False
         |> required "Mode" Json.Decode.int
         |> required "ModTime" Iso8601.decoder
         |> required "Name" Json.Decode.string

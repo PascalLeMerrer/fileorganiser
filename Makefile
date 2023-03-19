@@ -11,7 +11,10 @@ install:
 	cd elm; npm install --save-dev elm-review
 
 test:
-	cd elm; elm-test
+	cd elm; elm-test-rs
+
+test-watch:
+	cd elm; elm-test-rs --watch
 
 review:
 	cd elm; elm-review --fix

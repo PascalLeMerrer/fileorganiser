@@ -7,7 +7,7 @@ import Filesize
 import Help
 import Html exposing (Html, button, div, footer, form, h2, input, li, span, text, ul)
 import Html.Attributes exposing (class, disabled, id, placeholder, tabindex, type_, value)
-import Html.Events as Events exposing (onClick, onFocus, onInput, onSubmit)
+import Html.Events as Events exposing (onClick, onFocus, onInput, onMouseEnter, onMouseLeave, onSubmit)
 import Json.Decode exposing (list)
 import Json.Encode
 import Keyboard.Event exposing (KeyboardEvent, decodeKeyboardEvent)
@@ -16,6 +16,7 @@ import List.Extra
 import Pattern
 import Regex
 import String.Mark as Mark exposing (defaultOptions, multiWord)
+import StringUtil exposing (Chunk)
 import Task
 import Time exposing (Month(..))
 
@@ -131,6 +132,7 @@ type alias Model =
     , filesToRename : List File
     , focusedZone : FocusedZone
     , history : List (List Command)
+    , isAltPressed : Bool
     , isCreatingDirectory : Bool
     , isDebugVisible : Bool
     , isHelpVisible : Bool
@@ -165,6 +167,8 @@ type Msg
     | BackendReturnedRenamedFiles (List File) (List String)
     | BackendReturnedSourceDirectoryContent (List File)
     | BackendReturnedSourceDirectoryPath String
+    | CursorEnteredSourceFile File
+    | CursorExitSourceFile File
     | NoOp
     | UserChangedDestinationDirectoryFilter String
     | UserChangedDestinationFilesFilter String
@@ -181,6 +185,7 @@ type Msg
     | UserClickedDestinationDirectory Bool File -- isAbsolute,  destination
     | UserClickedDestinationDirectoryButton
     | UserClickedDestinationFile File
+    | UserClickedSourceNamePart String
     | UserClickedReload Target
     | UserClickedReplaceButton
     | UserClickedSourceDirectory Bool File -- isAbsolute, source
@@ -221,6 +226,7 @@ defaultModel =
     , filesToRename = []
     , focusedZone = LeftSide
     , history = []
+    , isAltPressed = False
     , isCreatingDirectory = False
     , isDebugVisible = False
     , isHelpVisible = False
@@ -1417,7 +1423,11 @@ replace model originalString =
 
 resetKeyStatuses : Model -> Model
 resetKeyStatuses model =
-    { model | isShiftPressed = False, isControlPressed = False }
+    { model
+        | isShiftPressed = False
+        , isControlPressed = False
+        , isAltPressed = False
+    }
 
 
 restoreFocus : Model -> ( Model, Cmd Msg )
@@ -1861,6 +1871,16 @@ update msg myModel =
                 , getSourceDirectoryContent path
                 )
 
+        CursorEnteredSourceFile file ->
+            ( { model | sourceFiles = List.Extra.updateIf (\f -> f == file) (\f -> { f | isMouseCursorOver = True }) model.sourceFiles }
+            , Cmd.none
+            )
+
+        CursorExitSourceFile file ->
+            ( { model | sourceFiles = List.Extra.updateIf (\f -> f == file) (\f -> { f | isMouseCursorOver = False }) model.sourceFiles }
+            , Cmd.none
+            )
+
         NoOp ->
             ( model, Cmd.none )
 
@@ -2007,6 +2027,17 @@ update msg myModel =
             , Cmd.none
             )
 
+        UserClickedSourceNamePart word ->
+            if model.isAltPressed && not (List.member word <| String.words model.sourceFilter) then
+                ( { model | sourceFilter = model.sourceFilter ++ " " ++ word }
+                    |> filterSourceFiles
+                    |> closeFileEditor
+                , Cmd.none
+                )
+
+            else
+                ( model |> closeFileEditor, Cmd.none )
+
         UserClickedReload target ->
             reload target model
 
@@ -2100,6 +2131,7 @@ update msg myModel =
             ( { model
                 | isShiftPressed = keyboardEvent.shiftKey
                 , isControlPressed = keyboardEvent.ctrlKey || keyboardEvent.metaKey
+                , isAltPressed = keyboardEvent.altKey
               }
             , Cmd.none
             )
@@ -2155,6 +2187,7 @@ update msg myModel =
             ( { model
                 | isShiftPressed = False
                 , isControlPressed = False
+                , isAltPressed = False
               }
             , Cmd.none
             )
@@ -2671,19 +2704,29 @@ viewPath model target =
 
 viewPressedKeys : Model -> Html Msg
 viewPressedKeys model =
-    text
-        (if model.isControlPressed then
-            " CTRL "
+    let
+        ctrl =
+            if model.isControlPressed then
+                "CTRL "
 
-         else
-            ""
-                ++ (if model.isShiftPressed then
-                        " SHIFT "
+            else
+                ""
 
-                    else
-                        ""
-                   )
-        )
+        shift =
+            if model.isShiftPressed then
+                "SHIFT "
+
+            else
+                ""
+
+        alt =
+            if model.isAltPressed then
+                "ALT"
+
+            else
+                ""
+    in
+    text <| ctrl ++ shift ++ alt
 
 
 viewReadOnlyFile : Model -> (File -> Msg) -> Bool -> File -> Html Msg
@@ -2703,33 +2746,70 @@ viewReadOnlyFile model onClickMsg canBeSearchedAndReplaced file =
 
                 SelectedForDeletion ->
                     "file marked-for-deletion"
-
-        fileName : List (Html Msg)
-        fileName =
-            if canBeSearchedAndReplaced then
-                case ( model.sourceSearch, model.sourceReplace ) of
-                    ( "", _ ) ->
-                        [ text file.name ]
-
-                    ( _, "" ) ->
-                        highlight (matches model file.name) file.name
-
-                    ( _, replacementString ) ->
-                        file.name
-                            |> replace model
-                            |> highlight replacementString
-
-            else
-                [ text file.name ]
     in
     div
         [ class className
         , onClick (onClickMsg file)
         ]
-        [ div [ class "filename" ] fileName
+        [ div
+            [ class "filename"
+            , onMouseEnter (CursorEnteredSourceFile file)
+            , onMouseLeave (CursorExitSourceFile file)
+            ]
+            (viewFilename model canBeSearchedAndReplaced file)
         , div [] [ text <| Filesize.format file.size ]
         , div [ class "filemodificationdate" ] [ viewDate model file.modTime ]
         ]
+
+
+viewFilename : Model -> Bool -> File -> List (Html Msg)
+viewFilename model canBeSearchedAndReplaced file =
+    if canBeSearchedAndReplaced && model.focusedZone == SourceSearchReplace then
+        case ( model.sourceSearch, model.sourceReplace ) of
+            ( "", _ ) ->
+                [ text file.name ]
+
+            ( _, "" ) ->
+                highlight (matches model file.name) file.name
+
+            ( _, replacementString ) ->
+                file.name
+                    |> replace model
+                    |> highlight replacementString
+
+    else if file.isMouseCursorOver then
+        file.name
+            |> StringUtil.split
+            |> List.map (viewChunk model)
+
+    else
+        [ text file.name ]
+
+
+viewChunk : Model -> Chunk -> Html Msg
+viewChunk model chunk =
+    if chunk.isSeparator then
+        span
+            [ class <|
+                if model.isAltPressed then
+                    "separator"
+
+                else
+                    ""
+            ]
+            [ text chunk.value ]
+
+    else
+        span
+            [ onClick <| UserClickedSourceNamePart chunk.value
+            , class <|
+                if model.isAltPressed then
+                    "clickable-chunk"
+
+                else
+                    ""
+            ]
+            [ text chunk.value ]
 
 
 viewRightSide : Model -> Html Msg

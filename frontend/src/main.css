@@ -25,6 +25,7 @@ body {
     url("assets/fonts/nunito-v16-latin-regular.woff2") format("woff2");
 }
 
+
 h2 {
   font-size: small;
   margin: 0;
@@ -376,4 +377,11 @@ kbd {
 }
 .keyboard-shortcut {
     width: 190px;
+}
+
+.clickable-chunk {
+    background-color: #FFD384;
+}
+.separator {
+    background-color: #D43847;
 }

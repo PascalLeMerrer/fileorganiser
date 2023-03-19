@@ -18,6 +18,7 @@ allDirs =
 dir1 : File
 dir1 =
     { isDir = True
+    , isMouseCursorOver = False
     , mode = 777
     , modTime = millisToPosix 0
     , name = "dirname"
