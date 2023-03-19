@@ -4,6 +4,7 @@ import Browser
 import Browser.Dom
 import File exposing (File, FileStatus(..), defaultDir, extendSelectionToNext, extendSelectionToPrevious, fileDecoder, selectNext, selectPrevious, toggleSelectionStatus, withName, withParentPath, withStatus)
 import Filesize
+import Help
 import Html exposing (Html, button, div, footer, form, h2, input, li, span, text, ul)
 import Html.Attributes exposing (class, disabled, id, placeholder, tabindex, type_, value)
 import Html.Events as Events exposing (onClick, onFocus, onInput, onSubmit)
@@ -104,6 +105,7 @@ type FocusedZone
     | DestinationFileNameEditor
     | ErrorMessage
     | Filtering
+    | Help
     | LeftSide
     | SourceFileNameEditor
     | DirNameEditor
@@ -131,6 +133,7 @@ type alias Model =
     , history : List (List Command)
     , isCreatingDirectory : Bool
     , isDebugVisible : Bool
+    , isHelpVisible : Bool
     , isDestinationLoadingInProgress : Bool
     , isSourceLoadingInProgress : Bool
     , isShiftPressed : Bool
@@ -186,6 +189,7 @@ type Msg
     | UserChangedFocusedZone FocusedZone
     | UserModifiedFileName String
     | UserModifiedDirName String
+    | UserPressedAnyKey
     | UserPressedKey Target KeyboardEvent
     | UserPressedOrReleasedKey KeyboardEvent
     | UserSubmittedDirName
@@ -219,6 +223,7 @@ defaultModel =
     , history = []
     , isCreatingDirectory = False
     , isDebugVisible = False
+    , isHelpVisible = False
     , isDestinationLoadingInProgress = True
     , isSourceLoadingInProgress = True
     , isShiftPressed = False
@@ -825,6 +830,16 @@ isFileNotFoundError model target errorMsg =
     errorMsg == "open " ++ dir ++ ": no such file or directory"
 
 
+anyKeyDecoder : Json.Decode.Decoder Msg
+anyKeyDecoder =
+    decodeKeyboardEvent
+        |> Json.Decode.map
+            (\_ ->
+                Debug.log "anyKeyDecoder"
+                    UserPressedAnyKey
+            )
+
+
 keyDecoder : Json.Decode.Decoder Msg
 keyDecoder =
     decodeKeyboardEvent
@@ -1093,6 +1108,9 @@ processKeyboardShortcut model target event =
                 _ ->
                     ( model, Cmd.none )
 
+        Help ->
+            ( { model | isHelpVisible = False, focusedZone = LeftSide }, Cmd.none )
+
         RightSide ->
             processMainShortcuts model target event
 
@@ -1120,6 +1138,9 @@ processMainShortcuts model target event =
                 ( { model | focusedZone = SourceSearchReplace }
                 , focusOn "search-left" NoOp
                 )
+
+            ( Key.Q, False ) ->
+                ( model, quit () )
 
             ( Key.R, False ) ->
                 reload target model
@@ -1159,6 +1180,15 @@ processMainShortcuts model target event =
 
             ( Key.F, False ) ->
                 openSelectedFolder model target
+
+            ( Key.H, _ ) ->
+                ( { model
+                    | isHelpVisible = True
+                    , focusedZone = Help
+                    , previousFocusedZone = model.focusedZone
+                  }
+                , focusOn "help" NoOp
+                )
 
             ( Key.M, False ) ->
                 moveSelectedFiles model
@@ -1411,6 +1441,10 @@ restoreFocus model =
             Filtering ->
                 -- TODO handle filtering right
                 "filtering-left"
+
+            Help ->
+                -- FIXME makes no sense: previousFocusedZone should never be "Help"
+                "help"
 
             LeftSide ->
                 "container-left"
@@ -2053,6 +2087,9 @@ update msg myModel =
         UserModifiedDirName newName ->
             ( { model | editedDirName = newName }, Cmd.none )
 
+        UserPressedAnyKey ->
+            ( { model | isHelpVisible = False, focusedZone = model.previousFocusedZone }, Cmd.none )
+
         UserPressedKey target event ->
             if model.isUndoing then
                 -- ignore key presses while an undoing is being performed
@@ -2191,6 +2228,26 @@ addLastRenamingToHistory files originalPaths model =
 
 view : Model -> Html Msg
 view model =
+    if model.isHelpVisible then
+        viewHelp
+
+    else
+        viewApp model
+
+
+viewHelp : Html Msg
+viewHelp =
+    div
+        [ id "help"
+        , class "help"
+        , Events.on "keydown" anyKeyDecoder
+        ]
+        [ Help.view
+        ]
+
+
+viewApp : Model -> Html Msg
+viewApp model =
     div
         [ class <|
             if model.isDebugVisible then

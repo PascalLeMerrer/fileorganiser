@@ -121,7 +121,7 @@ form {
   background-color: rgba(255, 255, 255, 1);
 }
 
-.file {
+.file, .help-row {
   display: flex;
   flex-direction: row;
   flex-wrap: nowrap;
@@ -129,12 +129,12 @@ form {
   word-break: break-all;
 }
 
-.file {
+.file, .help-row {
     background: ghostwhite;
     cursor: pointer;
 }
 
-.file:nth-child(odd) { background: #DDD; }
+.file:nth-child(odd), .help-row:nth-child(odd) { background: #DDD; }
 
 .file.selected {
   font-weight: bold;
@@ -339,4 +339,41 @@ footer {
     100% {
       transform: rotate(360deg);
     }
+}
+
+kbd {
+    background-color: #eee;
+    border-radius: 3px;
+    border: 1px solid #b4b4b4;
+    box-shadow: 0 1px 1px rgba(0, 0, 0, 0.2), 0 2px 0 0 rgba(255, 255, 255, 0.7) inset;
+    color: #333;
+    display: inline-block;
+    font-weight: 400;
+    font-size: 1rem;
+    line-height: 1.2;
+    padding: 2px 4px;
+    margin-right: 5px;
+    white-space: nowrap;
+}
+
+.help {
+    margin: 3rem;
+    display: grid;
+    grid-template-columns: 1fr 2fr 1fr;
+}
+
+.help-content {
+    grid-column: 2 / 3;
+}
+
+.help-content section {
+    margin-top: 2rem;
+}
+
+.help-row {
+    padding: 5px;
+    align-items: center;
+}
+.keyboard-shortcut {
+    width: 190px;
 }
