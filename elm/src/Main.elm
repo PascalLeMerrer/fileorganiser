@@ -1194,7 +1194,7 @@ processMainShortcuts model target event =
                 moveSelectedFiles model
 
             ( Key.N, False ) ->
-                showDirNameEditor model target
+                showDirNameEditor model
 
             ( Key.O, False ) ->
                 openSelectedFile model target
@@ -1466,18 +1466,15 @@ restoreFocus model =
 -- VIEW
 
 
-showDirNameEditor : Model -> Target -> ( Model, Cmd Msg )
-showDirNameEditor model target =
-    case target of
-        Source ->
-            ( model, Cmd.none )
-
-        Destination ->
-            ( { model
-                | isCreatingDirectory = True
-              }
-            , focusOn "dirname-input" NoOp
-            )
+showDirNameEditor : Model -> ( Model, Cmd Msg )
+showDirNameEditor model =
+    ( { model
+        | isCreatingDirectory = True
+        , focusedZone = RightSide
+        , previousFocusedZone = model.focusedZone
+      }
+    , focusOn "dirname-input" NoOp
+    )
 
 
 simpleKeyDecoder : Target -> Json.Decode.Decoder Msg
