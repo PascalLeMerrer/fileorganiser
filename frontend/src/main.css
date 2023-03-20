@@ -379,9 +379,9 @@ kbd {
     width: 190px;
 }
 
-.clickable-chunk {
+.clickable-chunk:hover {
     background-color: #FFD384;
 }
 .separator {
-    background-color: #D43847;
+    color: #AAAAAA;
 }
