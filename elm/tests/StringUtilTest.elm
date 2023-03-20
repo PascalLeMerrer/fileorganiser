@@ -109,6 +109,30 @@ suite =
                         , separator ")"
                         , word "separators"
                         ]
+        , test "Accepts accentuated chars in words" <|
+            \_ ->
+                "La légèreté à côté"
+                    |> StringUtil.split
+                    |> Expect.equal
+                        [ word "La"
+                        , separator " "
+                        , word "légèreté"
+                        , separator " "
+                        , word "à"
+                        , separator " "
+                        , word "côté"
+                        ]
+        , test "Accepts special chars in words" <|
+            \_ ->
+                "87,5% of total"
+                    |> StringUtil.split
+                    |> Expect.equal
+                        [ word "87,5%"
+                        , separator " "
+                        , word "of"
+                        , separator " "
+                        , word "total"
+                        ]
         ]
 
 

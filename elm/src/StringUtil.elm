@@ -46,9 +46,13 @@ chunkParser reversedChunks =
         ]
 
 
+isChar =
+    \c -> not <| List.member c [ '(', ')', '[', ']', ' ', '.', '-', ' ', '_' ]
+
+
 word : Parser String
 word =
     getChompedString <|
         succeed ()
-            |. chompIf isAlphaNum
-            |. chompWhile isAlphaNum
+            |. chompIf isChar
+            |. chompWhile isChar
