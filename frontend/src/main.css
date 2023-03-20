@@ -189,7 +189,7 @@ header {
   grid-column-start: 1;
   grid-column-end: 2;
   grid-row-start: 2;
-  grid-row-end: 4;
+  grid-row-end: 3;
   background: lightgrey;
   padding: 5px;
   min-height: 0; /* Prevents the grid to extend outside of the visible area */
@@ -203,7 +203,7 @@ header {
   grid-column-start: 2;
   grid-column-end: 3;
   grid-row-start: 2;
-  grid-row-end: 4;
+  grid-row-end: 3;
   background: lightgrey;
   padding: 5px;
   min-height: 0; /* Prevents the grid to extend outside of the visible area */
