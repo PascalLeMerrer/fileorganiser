@@ -1181,6 +1181,16 @@ processMainShortcuts model target event =
 
     else
         case ( event.keyCode, event.shiftKey ) of
+            ( Key.C, False ) ->
+                ( { model
+                    | destinationDirectoryFilter = model.sourceFilter
+                    , destinationFilesFilter = model.sourceFilter
+                  }
+                    |> filterDestinationFiles
+                    |> filterDestinationDirectories
+                , Cmd.none
+                )
+
             ( Key.D, False ) ->
                 ( { model | isDebugVisible = not model.isDebugVisible }, Cmd.none )
 
@@ -1210,6 +1220,18 @@ processMainShortcuts model target event =
 
             ( Key.U, False ) ->
                 undo model
+
+            ( Key.X, False ) ->
+                ( { model
+                    | sourceFilter = ""
+                    , destinationDirectoryFilter = ""
+                    , destinationFilesFilter = ""
+                  }
+                    |> filterSourceFiles
+                    |> filterDestinationDirectories
+                    |> filterDestinationFiles
+                , Cmd.none
+                )
 
             ( Key.Left, _ ) ->
                 goBack model target

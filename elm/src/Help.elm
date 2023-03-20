@@ -46,13 +46,14 @@ help =
             , { keys = [ "F5" ], description = "Reload file list" }
             ]
       }
-    , { title = "Focus"
-      , description = "Sets the focus on an input field "
+    , { title = "Filter"
+      , description = "Filter files or directories"
       , keymap =
-            [ { keys = [ "CTRL", "F" ], description = "Focus search field" }
-            , { keys = [ "ALT", "D" ], description = "Focus Destination directories filter" }
+            [ { keys = [ "ALT", "D" ], description = "Focus Destination directories filter" }
             , { keys = [ "ALT", "F" ], description = "Focus Destination files filter" }
             , { keys = [ "ALT", "S" ], description = "Focus Source directories filter" }
+            , { keys = [ "C" ], description = "Copy source filter to destination filters" }
+            , { keys = [ "X" ], description = "Delete all filters" }
             ]
       }
     , { title = "Act on directories"
@@ -63,13 +64,14 @@ help =
             , { keys = [ "F5" ], description = "Reload destination directories list" }
             ]
       }
-    , { title = "Global"
+    , { title = "Miscellaneous"
       , description = ""
       , keymap =
             [ { keys = [ "H" ], description = "Display this help" }
             , { keys = [ "ALT", "F4" ], description = "Quit" }
             , { keys = [ "CTRL", "Q" ], description = "Quit" }
             , { keys = [ "U" ], description = "Undo last action" }
+            , { keys = [ "CTRL", "F" ], description = "Focus search field" }
             , { keys = [ "CTRL", "Z" ], description = "Undo last action" }
             , { keys = [ "ESC" ], description = "Cancel current edition (file renaming, directory creation)" }
             ]
