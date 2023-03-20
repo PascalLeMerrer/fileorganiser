@@ -1184,9 +1184,7 @@ processMainShortcuts model target event =
             ( Key.C, False ) ->
                 ( { model
                     | destinationDirectoryFilter = model.sourceFilter
-                    , destinationFilesFilter = model.sourceFilter
                   }
-                    |> filterDestinationFiles
                     |> filterDestinationDirectories
                 , Cmd.none
                 )
@@ -1220,6 +1218,14 @@ processMainShortcuts model target event =
 
             ( Key.U, False ) ->
                 undo model
+
+            ( Key.V, False ) ->
+                ( { model
+                    | destinationFilesFilter = model.sourceFilter
+                  }
+                    |> filterDestinationFiles
+                , Cmd.none
+                )
 
             ( Key.X, False ) ->
                 ( { model
