@@ -1841,6 +1841,7 @@ update msg myModel =
                 in
                 ( { model | focusedZone = zone }
                     |> addLastRenamingToHistory files originalPaths
+                    |> closeFileEditor
                 , Cmd.batch
                     [ focusOn nodeId NoOp
                     , reloadFiles model
@@ -2203,7 +2204,7 @@ update msg myModel =
                     if editedFile.name == model.editedFileName then
                         ( { model | focusedZone = LeftSide }
                             |> closeFileEditor
-                        , Cmd.none
+                        , focusOn "source-files" NoOp
                         )
 
                     else
@@ -2946,7 +2947,9 @@ viewSourceFiles model =
             , button [ class "btn", onClick UserClickedCopyFilterButton ] [ text "Copy" ]
             ]
         , div
-            [ class "panel-content" ]
+            [ id "source-files"
+            , class "panel-content"
+            ]
             (model.sourceFiles
                 |> List.filter .satisfiesFilter
                 |> List.map (viewFile model Source UserClickedSourceFile True)
