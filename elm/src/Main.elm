@@ -2913,9 +2913,13 @@ viewSearchReplaceForm model =
 
 viewSource : Model -> List (Html Msg)
 viewSource model =
-    [ viewSourceSubdirectories model
-    , viewSourceFiles model
-    ]
+    if model.isSourceLoadingInProgress then
+        [ viewLoadingAnimation ]
+
+    else
+        [ viewSourceSubdirectories model
+        , viewSourceFiles model
+        ]
 
 
 viewSourceFiles : Model -> Html Msg
