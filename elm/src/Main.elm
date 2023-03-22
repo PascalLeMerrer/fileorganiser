@@ -1830,9 +1830,21 @@ update msg myModel =
                 )
 
             else if List.isEmpty model.filesToRename then
-                ( model
+                let
+                    ( zone, nodeId ) =
+                        case model.focusedZone of
+                            SourceFileNameEditor ->
+                                ( LeftSide, "container-left" )
+
+                            _ ->
+                                ( RightSide, "container-right" )
+                in
+                ( { model | focusedZone = zone }
                     |> addLastRenamingToHistory files originalPaths
-                , reloadFiles model
+                , Cmd.batch
+                    [ focusOn nodeId NoOp
+                    , reloadFiles model
+                    ]
                 )
 
             else
@@ -2175,7 +2187,6 @@ update msg myModel =
             let
                 isConflicting : Bool
                 isConflicting =
-                    -- FIXME: it should not detect a conflict when the name of the file is unchanged
                     case target of
                         Destination ->
                             List.any (\f -> f.name == model.editedFileName) model.destinationFiles
@@ -2188,13 +2199,20 @@ update msg myModel =
                     String.isEmpty model.editedFileName
             in
             case ( model.editedFile, isConflicting, isNameEmpty ) of
-                ( Just _, True, False ) ->
-                    ( { model
-                        | error = Just ("A file with the name " ++ model.editedFileName ++ " already exists in the same directory")
-                        , focusedZone = ErrorMessage
-                      }
-                    , focusOn "close-error" NoOp
-                    )
+                ( Just editedFile, True, False ) ->
+                    if editedFile.name == model.editedFileName then
+                        ( { model | focusedZone = LeftSide }
+                            |> closeFileEditor
+                        , Cmd.none
+                        )
+
+                    else
+                        ( { model
+                            | error = Just ("A file with the name " ++ model.editedFileName ++ " already exists in the same directory")
+                            , focusedZone = ErrorMessage
+                          }
+                        , focusOn "close-error" NoOp
+                        )
 
                 ( Just editedFile, False, False ) ->
                     let
