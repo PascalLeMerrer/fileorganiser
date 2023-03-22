@@ -52,9 +52,10 @@ help =
             [ { keys = [ "ALT", "D" ], description = "Focus Destination directories filter" }
             , { keys = [ "ALT", "F" ], description = "Focus Destination files filter" }
             , { keys = [ "ALT", "S" ], description = "Focus Source directories filter" }
-            , { keys = [ "X" ], description = "Delete all filters" }
+            , { keys = [ "ALT", "CLICK" ], description = "Adds the cliked word to the filter" }
             , { keys = [ "C" ], description = "Copy source filter to destination directory filter" }
             , { keys = [ "V" ], description = "Copy source filter to destination file filter" }
+            , { keys = [ "X" ], description = "Delete all filters" }
             ]
       }
     , { title = "Act on directories"
